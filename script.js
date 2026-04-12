@@ -32,8 +32,8 @@ let sgBullets;
 let snBullets; // 狙擊槍彈藥群組
 
 // --- 彈弓 (原機關槍) 系統變數 ---
-let mgAmmo = 30;
-let mgMaxAmmo = 30;
+let mgAmmo = 72; // 將上限改為 72
+let mgMaxAmmo = 72; // 將上限改為 72
 let mgIsReloading = false;
 let lastMgFired = 0;
 let mgFireRate = 100;
@@ -58,7 +58,7 @@ let snText;
 function preload() {
     this.load.image('胖嘟嘟發電機', 'https://yt3.googleusercontent.com/aET0nIXYzBzTkqili3s14Ks_9Vkp6910Ug4ZAP2r_UfkD5dj-Ed-aSqoH52Wv4vbT2MlWtsguQ=s900-c-k-c0x00ffffff-no-rj');
     this.load.image('地板', 'https://tse1.explicit.bing.net/th/id/OIP.PU9mfnoeDIY56du54-AHxAHaE7?rs=1&pid=ImgDetMain&o=7&rm=3');
-    this.load.image('鯊比', 'assets/images/鯊比.png');
+    this.load.image('鯊比', 'assets/images/shabi.png');
 }
 
 function create() {
