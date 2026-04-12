@@ -11,7 +11,7 @@ const config = {
         default: 'arcade',
         arcade: {
             gravity: { y: 1000 },
-            debug: false // 關閉物理偵錯模式
+            debug: false
         }
     },
     scene: {
@@ -24,26 +24,40 @@ const config = {
 const game = new Phaser.Game(config);
 
 let player; 
-let cursors;
+let keys;
 let platforms;
 let ground;
-let bullets;
+let mgBullets;
+let sgBullets;
+let snBullets; // 狙擊槍彈藥群組
 
-// --- 機關槍與霰彈槍系統變數 ---
-let ammo = 30; // 目前彈藥數
-let maxAmmo = 30; // 彈藥上限
-let isReloading = false; // 是否冷卻中
-let lastFired = 0; // 上次發射時間
-let fireRate = 100; // 機關槍發射間隔 (0.1 秒)
-let shotgunRate = 500; // 霰彈槍發射間隔 (0.5 秒)
-let ammoText; // 彈藥 UI 文字
+// --- 彈弓 (原機關槍) 系統變數 ---
+let mgAmmo = 30;
+let mgMaxAmmo = 30;
+let mgIsReloading = false;
+let lastMgFired = 0;
+let mgFireRate = 100;
+let mgText;
+
+// --- 霰彈槍系統變數 ---
+let sgAmmo = 5;
+let sgMaxAmmo = 5;
+let sgIsReloading = false;
+let lastSgFired = 0;
+let sgFireRate = 500;
+let sgText;
+
+// --- 狙擊槍系統變數 ---
+let snAmmo = 5;
+let snMaxAmmo = 5;
+let snIsReloading = false;
+let lastSnFired = 0;
+let snFireRate = 1500; // 1.5 秒一發
+let snText;
 
 function preload() {
-    // 載入玩家圖片
     this.load.image('胖嘟嘟發電機', 'https://yt3.googleusercontent.com/aET0nIXYzBzTkqili3s14Ks_9Vkp6910Ug4ZAP2r_UfkD5dj-Ed-aSqoH52Wv4vbT2MlWtsguQ=s900-c-k-c0x00ffffff-no-rj');
-    // 載入地板圖片
     this.load.image('地板', 'https://tse1.explicit.bing.net/th/id/OIP.PU9mfnoeDIY56du54-AHxAHaE7?rs=1&pid=ImgDetMain&o=7&rm=3');
-    // 載入發射物的圖片
     this.load.image('鯊比', 'assets/images/鯊比.png');
 }
 
@@ -51,63 +65,61 @@ function create() {
     const width = this.cameras.main.width;
     const height = this.cameras.main.height;
 
-    // 停用瀏覽器右鍵選單
     this.input.mouse.disableContextMenu();
-
-    // 設定世界邊界，關閉底部碰撞以便讓地板接手
     this.physics.world.setBounds(0, 0, width, height, true, true, true, false);
 
-    // 建立平台靜態群組
     platforms = this.physics.add.staticGroup();
     ground = platforms.create(width / 2, height - 50, '地板');
     ground.setDisplaySize(width, 40);
     ground.refreshBody();
 
-    // 初始化彈藥物理群組
-    bullets = this.physics.add.group();
+    mgBullets = this.physics.add.group();
+    sgBullets = this.physics.add.group();
+    snBullets = this.physics.add.group();
 
-    // 建立玩家
     player = this.physics.add.sprite(width / 2, height - 150, '胖嘟嘟發電機');
     player.setScale(0.1);
     player.setCollideWorldBounds(true);
     player.setBounce(0.1);
 
-    // 設定碰撞
     this.physics.add.collider(player, platforms);
-    this.physics.add.collider(bullets, platforms);
-    this.physics.add.collider(bullets, bullets); // 鯊比與鯊比之間依然會互撞彈開
-
-    // 建立彈藥顯示 UI
-    ammoText = this.add.text(20, 20, `Ammo: ${ammo}/${maxAmmo}`, { 
-        fontSize: '28px', 
-        fill: '#ff0000',
-        fontStyle: 'bold',
-        stroke: '#000',
-        strokeThickness: 4
+    this.physics.add.collider(mgBullets, platforms);
+    this.physics.add.collider(mgBullets, mgBullets);
+    this.physics.add.collider(sgBullets, platforms);
+    
+    this.physics.add.collider(snBullets, platforms, (bullet) => {
+        bullet.destroy();
     });
 
-    // 監聽物理邊界碰撞，讓鯊比撞到牆壁後銷毀
+    // --- 建立 UI ---
+    // 左上角彈弓 UI (黃色)
+    mgText = this.add.text(20, 20, `Slingshot: ${mgAmmo}/${mgMaxAmmo}`, { 
+        fontSize: '22px', fill: '#ffff00', fontStyle: 'bold', stroke: '#000', strokeThickness: 3
+    });
+
+    // 右上角霰彈槍 UI (綠色)
+    sgText = this.add.text(width - 20, 20, `Shotgun: ${sgAmmo}/${sgMaxAmmo}`, { 
+        fontSize: '22px', fill: '#00ff00', fontStyle: 'bold', stroke: '#000', strokeThickness: 3
+    }).setOrigin(1, 0);
+
+    // 正上方狙擊槍 UI (青藍色)
+    snText = this.add.text(width / 2, 20, `Sniper: ${snAmmo}/${snMaxAmmo}`, { 
+        fontSize: '22px', fill: '#00ffff', fontStyle: 'bold', stroke: '#000', strokeThickness: 3
+    }).setOrigin(0.5, 0);
+
     this.physics.world.on('worldbounds', (body) => {
-        if (body.gameObject && bullets.contains(body.gameObject)) {
-            body.gameObject.destroy();
+        const obj = body.gameObject;
+        if (obj && (mgBullets.contains(obj) || sgBullets.contains(obj) || snBullets.contains(obj))) {
+            obj.destroy();
         }
     });
 
-    // 初始化鍵盤控制 (WASD)
     this.keys = this.input.keyboard.addKeys({
         up: Phaser.Input.Keyboard.KeyCodes.W,
         left: Phaser.Input.Keyboard.KeyCodes.A,
         right: Phaser.Input.Keyboard.KeyCodes.D
     });
-    
-    // 攔截 W, A, D 鍵
-    this.input.keyboard.addCapture([
-        Phaser.Input.Keyboard.KeyCodes.W,
-        Phaser.Input.Keyboard.KeyCodes.A,
-        Phaser.Input.Keyboard.KeyCodes.D
-    ]);
 
-    // 處理視窗大小改變
     window.addEventListener('resize', () => {
         const newWidth = window.innerWidth;
         const newHeight = window.innerHeight;
@@ -116,106 +128,109 @@ function create() {
         ground.setPosition(newWidth / 2, newHeight - 50);
         ground.setDisplaySize(newWidth, 40);
         ground.refreshBody();
+        sgText.setX(newWidth - 20);
+        snText.setX(newWidth / 2);
     });
 }
 
 function update(time) {
-    // --- 射擊邏輯 ---
     const pointer = this.input.activePointer;
     
-    if (!isReloading && ammo > 0) {
-        // 左鍵：機關槍掃射
-        if (pointer.leftButtonDown()) {
-            if (time > lastFired + fireRate) {
-                fireBullet(this, pointer);
-                lastFired = time;
-            }
+    // 彈弓 (左鍵)
+    if (pointer.leftButtonDown() && !mgIsReloading && mgAmmo > 0) {
+        if (time > lastMgFired + mgFireRate) {
+            fireMG(this, pointer);
+            lastMgFired = time;
         }
-        // 右鍵：霰彈槍掃射 (一次 5 發，間隔 18 度)
-        else if (pointer.rightButtonDown()) {
-            if (time > lastFired + shotgunRate) {
-                fireShotgun(this, pointer);
-                lastFired = time;
-            }
+    }
+    
+    // 霰彈槍 (右鍵)
+    if (pointer.rightButtonDown() && !sgIsReloading && sgAmmo > 0) {
+        if (time > lastSgFired + sgFireRate) {
+            fireSG(this, pointer);
+            lastSgFired = time;
         }
     }
 
-    // --- 玩家移動邏輯 (使用 WASD) ---
-    if (this.keys.left.isDown) {
-        player.setVelocityX(-400);
-    } else if (this.keys.right.isDown) {
-        player.setVelocityX(400);
-    } else {
-        player.setVelocityX(0);
+    // 狙擊槍 (中鍵)
+    if (pointer.middleButtonDown() && !snIsReloading && snAmmo > 0) {
+        if (time > lastSnFired + snFireRate) {
+            fireSN(this, pointer);
+            lastSnFired = time;
+        }
     }
 
-    // 跳躍 (W 鍵)
-    if (this.keys.up.isDown && player.body.touching.down) {
-        player.setVelocityY(-550);
-    }
+    if (this.keys.left.isDown) player.setVelocityX(-400);
+    else if (this.keys.right.isDown) player.setVelocityX(400);
+    else player.setVelocityX(0);
+
+    if (this.keys.up.isDown && player.body.touching.down) player.setVelocityY(-550);
 }
 
-// 單發子彈發射 (機關槍)
-function fireBullet(scene, pointer) {
+function fireMG(scene, pointer) {
     const angle = Phaser.Math.Angle.Between(player.x, player.y, pointer.x, pointer.y);
-    const spawnX = player.x + Math.cos(angle) * 40;
-    const spawnY = player.y + Math.sin(angle) * 40;
-
-    const bullet = bullets.create(spawnX, spawnY, '鯊比');
+    const bullet = mgBullets.create(player.x + Math.cos(angle) * 40, player.y + Math.sin(angle) * 40, '鯊比');
     if (bullet) {
         bullet.setScale(0.05);
-        const speed = 800;
-        bullet.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+        bullet.setVelocity(Math.cos(angle) * 800, Math.sin(angle) * 800);
         bullet.setCollideWorldBounds(true);
         bullet.body.onWorldBounds = true;
         bullet.setBounce(0.9);
-
-        ammo--;
-        updateAmmoText();
-        checkReload(scene);
+        mgAmmo--;
+        updateMgUI();
+        if (mgAmmo <= 0) {
+            mgIsReloading = true;
+            mgText.setText('RELOADING...');
+            scene.time.delayedCall(3000, () => { mgAmmo = mgMaxAmmo; mgIsReloading = false; updateMgUI(); });
+        }
     }
 }
 
-// 霰彈槍發射 (右鍵)
-function fireShotgun(scene, pointer) {
+function fireSG(scene, pointer) {
     const centerAngle = Phaser.Math.Angle.Between(player.x, player.y, pointer.x, pointer.y);
-    const spread = Phaser.Math.DegToRad(18); // 18 度轉弧度
-    
-    // 一次產生 5 顆子彈
+    const spread = Phaser.Math.DegToRad(18);
     for (let i = -2; i <= 2; i++) {
         const angle = centerAngle + (i * spread);
-        const spawnX = player.x + Math.cos(angle) * 40;
-        const spawnY = player.y + Math.sin(angle) * 40;
-
-        const bullet = bullets.create(spawnX, spawnY, '鯊比');
+        const bullet = sgBullets.create(player.x + Math.cos(angle) * 40, player.y + Math.sin(angle) * 40, '鯊比');
         if (bullet) {
             bullet.setScale(0.05);
-            const speed = 700; // 霰彈槍速度稍慢
-            bullet.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+            bullet.body.allowGravity = false;
+            bullet.setVelocity(Math.cos(angle) * 700, Math.sin(angle) * 700);
             bullet.setCollideWorldBounds(true);
             bullet.body.onWorldBounds = true;
             bullet.setBounce(0.9);
         }
     }
-    
-    ammo -= 5; // 消耗 5 發彈藥
-    if (ammo < 0) ammo = 0;
-    updateAmmoText();
-    checkReload(scene);
-}
-
-function updateAmmoText() {
-    ammoText.setText(`Ammo: ${ammo}/${maxAmmo}`);
-}
-
-function checkReload(scene) {
-    if (ammo <= 0 && !isReloading) {
-        isReloading = true;
-        ammoText.setText('RELOADING...');
-        scene.time.delayedCall(3000, () => {
-            ammo = maxAmmo;
-            isReloading = false;
-            updateAmmoText();
-        });
+    sgAmmo -= 5;
+    if (sgAmmo < 0) sgAmmo = 0;
+    updateSgUI();
+    if (sgAmmo <= 0) {
+        sgIsReloading = true;
+        sgText.setText('RELOADING...');
+        scene.time.delayedCall(1000, () => { sgAmmo = sgMaxAmmo; sgIsReloading = false; updateSgUI(); });
     }
 }
+
+function fireSN(scene, pointer) {
+    const angle = Phaser.Math.Angle.Between(player.x, player.y, pointer.x, pointer.y);
+    const bullet = snBullets.create(player.x + Math.cos(angle) * 40, player.y + Math.sin(angle) * 40, '鯊比');
+    if (bullet) {
+        bullet.setScale(0.1, 0.025);
+        bullet.setRotation(angle);
+        bullet.body.allowGravity = false;
+        bullet.setVelocity(Math.cos(angle) * 1500, Math.sin(angle) * 1500);
+        bullet.setCollideWorldBounds(true);
+        bullet.body.onWorldBounds = true;
+        snAmmo--;
+        updateSnUI();
+        if (snAmmo <= 0) {
+            snIsReloading = true;
+            snText.setText('RELOADING...');
+            scene.time.delayedCall(5000, () => { snAmmo = snMaxAmmo; snIsReloading = false; updateSnUI(); });
+        }
+    }
+}
+
+function updateMgUI() { mgText.setText(`Slingshot: ${mgAmmo}/${mgMaxAmmo}`); }
+function updateSgUI() { sgText.setText(`Shotgun: ${sgAmmo}/${sgMaxAmmo}`); }
+function updateSnUI() { snText.setText(`Sniper: ${snAmmo}/${snMaxAmmo}`); }
