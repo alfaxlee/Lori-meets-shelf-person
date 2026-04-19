@@ -98,6 +98,58 @@ function create() {
 
     this.physics.add.collider(player, platforms);
     this.physics.add.collider(loli, platforms); 
+    
+    // --- 死亡碰撞：碰到蘿莉就讓網頁「當機」 ---
+    this.physics.add.collider(player, loli, () => {
+        // 暫停物理引擎與場景更新 (停止遊戲)
+        this.physics.pause();
+        this.scene.pause();
+        
+        // 建立一個覆蓋全螢幕的當機畫面 (模擬經典藍屏 BSOD 改為猴塞雷 Jumpscare)
+        const crashScreen = document.createElement('div');
+        crashScreen.style.position = 'fixed';
+        crashScreen.style.top = '0';
+        crashScreen.style.left = '0';
+        crashScreen.style.width = '100vw';
+        crashScreen.style.height = '100vh';
+        crashScreen.style.backgroundImage = 'url("./assets/猴塞雷jumpscare.png")'; // 設定 Jumpscare 圖片
+        crashScreen.style.backgroundSize = 'cover';
+        crashScreen.style.backgroundPosition = 'center';
+        crashScreen.style.color = 'white';
+        crashScreen.style.padding = '10%';
+        crashScreen.style.fontFamily = 'Segoe UI, Arial, sans-serif';
+        crashScreen.style.zIndex = '10000';
+        crashScreen.style.cursor = 'none'; // 隱藏滑鼠，增加當機感
+        crashScreen.style.textShadow = '2px 2px 4px rgba(0,0,0,0.8)'; // 增加文字陰影以利在圖片上閱讀
+        
+        crashScreen.innerHTML = `
+            <div style="font-size: 120px; margin-bottom: 20px;">:(</div>
+            <h1 style="font-size: 30px; font-weight: normal; line-height: 1.4;">
+                您的網頁發生問題，需要重新整理。<br>
+                我們只收集了一些錯誤資訊，然後您就可以重新整理。
+            </h1>
+            <div style="margin-top: 40px; font-size: 20px;">
+                0% 完成
+            </div>
+            <div style="margin-top: 50px; display: flex; align-items: flex-start;">
+                <div style="width: 100px; height: 100px; background-color: white; margin-right: 20px;">
+                    <!-- 模擬二維碼區域 -->
+                    <div style="width: 100%; height: 100%; background: repeating-conic-gradient(#333 0% 25%, white 0% 50%) 50% / 20px 20px;"></div>
+                </div>
+                <div>
+                    <p style="margin: 0; font-size: 16px;">如果您想了解更多資訊，可以稍後在線上搜尋此錯誤:</p>
+                    <p style="margin: 5px 0 0 0; font-size: 18px; font-weight: bold;">LOLI_CAUGHT_YOU_CRITICAL_PROCESS_DIED</p>
+                </div>
+            </div>
+            <p style="margin-top: 50px; font-size: 18px;">請按下瀏覽器的「重新整理」按鈕以重啟遊戲。</p>
+        `;
+        
+        document.body.appendChild(crashScreen);
+        
+        // 拋出一個錯誤來中斷後續的 JavaScript 執行
+        throw new Error("System Crash: Player caught by loli.");
+    });
+
     this.physics.add.collider(mgBullets, platforms);
     this.physics.add.collider(sgBullets, platforms);
     this.physics.add.collider(snBullets, platforms, (bullet) => { bullet.destroy(); });
