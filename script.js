@@ -81,12 +81,8 @@ function create() {
     const width = this.cameras.main.width;
     const height = this.cameras.main.height;
     
-    // 點擊畫面時嘗試進入全螢幕
-    this.input.on('pointerdown', () => {
-        if (!this.scale.isFullscreen) {
-            this.scale.startFullscreen();
-        }
-    });
+    // 啟用多點觸控 (最多支援 5 點同時操作)
+    this.input.addPointer(5);
 
     // 更好的手機偵測方式：結合 UserAgent 與觸控支援
     isActuallyMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || !this.sys.game.device.os.desktop;
@@ -254,9 +250,21 @@ function createBtn(scene, x, y, label, color, key) {
     const b = scene.add.circle(x, y, 93, color, 0.6).setScrollFactor(0).setDepth(1000).setInteractive();
     // 文字縮小至 27px
     const t = scene.add.text(x, y, label, { fontSize: '27px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(1001);
-    b.on('pointerdown', () => { mobileInput[key] = true; b.setAlpha(0.9); });
-    b.on('pointerup', () => { mobileInput[key] = false; b.setAlpha(0.6); });
-    b.on('pointerout', () => { mobileInput[key] = false; b.setAlpha(0.6); });
+    
+    // 支援多點觸控的按鈕邏輯
+    b.on('pointerdown', (pointer) => { 
+        mobileInput[key] = true; 
+        b.setAlpha(0.9); 
+    });
+    b.on('pointerup', (pointer) => { 
+        mobileInput[key] = false; 
+        b.setAlpha(0.6); 
+    });
+    b.on('pointerout', (pointer) => { 
+        mobileInput[key] = false; 
+        b.setAlpha(0.6); 
+    });
+    
     if (!scene.mobileButtons) scene.mobileButtons = [];
     scene.mobileButtons.push({ btn: b, txt: t, originalOffsetX: scene.cameras.main.width - x, originalOffsetY: scene.cameras.main.height - y });
 }
