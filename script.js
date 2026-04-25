@@ -225,12 +225,19 @@ function setupMobileControls(scene) {
     scene.input.setDraggable(joystickThumb);
     scene.input.on('drag', (pointer, gameObject, dragX, dragY) => {
         if (gameObject === joystickThumb) {
-            const dx = dragX - joystickBase.x; const dy = dragY - joystickBase.y;
+            // 計算拖拽距離與角度，支援多點觸控下的獨立操作
+            const dx = dragX - joystickBase.x; 
+            const dy = dragY - joystickBase.y;
             const dist = Math.min(Math.sqrt(dx * dx + dy * dy), 107);
             const angle = Math.atan2(dy, dx);
+            
             gameObject.x = joystickBase.x + Math.cos(angle) * dist;
             gameObject.y = joystickBase.y + Math.sin(angle) * dist;
-            mobileInput.left = (dx < -40); mobileInput.right = (dx > 40); mobileInput.up = (dy < -40);
+            
+            // 更新移動狀態
+            mobileInput.left = (dx < -40); 
+            mobileInput.right = (dx > 40); 
+            mobileInput.up = (dy < -40);
         }
     });
     scene.input.on('dragend', () => {
