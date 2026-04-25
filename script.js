@@ -142,8 +142,8 @@ function create() {
         crashScreen.innerHTML = `
             <div id="bsod-content" style="padding: 10%; color: white; font-family: sans-serif;">
                 <div style="font-size: 80px; line-height: 1;">:(</div>
-                <h1 style="font-size: 24px; font-weight: 300;">您的電腦發生問題，必須重新啟動。</h1>
-                <div style="margin-top: 30px; font-size: 20px;"><span id="progress-percent">0</span>% 完成</div>
+                <h1 style="font-size: 24px; font-weight: 300;">不明錯誤，我們將盡力幫您修復，若無法修復請上:</h1>
+                <div style="margin-top: 30px; font-size: 20px;">修復中<span id="progress-percent">0</span>% 完成</div>
                 <div style="margin-top: 40px; display: flex;">
                     <img src="./assets/images/遊戲QR code.png?t=${Date.now()}" style="width: 100px; height: 100px; background: white; padding: 5px;">
                     <div style="margin-left: 20px; font-size: 14px;">
