@@ -81,6 +81,13 @@ function create() {
     const width = this.cameras.main.width;
     const height = this.cameras.main.height;
     
+    // 點擊畫面時嘗試進入全螢幕
+    this.input.on('pointerdown', () => {
+        if (!this.scale.isFullscreen) {
+            this.scale.startFullscreen();
+        }
+    });
+
     // 更好的手機偵測方式：結合 UserAgent 與觸控支援
     isActuallyMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || !this.sys.game.device.os.desktop;
 
@@ -222,37 +229,37 @@ function create() {
 function setupMobileControls(scene) {
     const height = scene.cameras.main.height;
     const width = scene.cameras.main.width;
-    // 放大搖桿尺寸 (底座 100, 搖桿頭 50)
-    joystickBase = scene.add.circle(150, height - 150, 100, 0x888888, 0.5).setScrollFactor(0).setDepth(1000);
-    joystickThumb = scene.add.circle(150, height - 150, 50, 0xcccccc, 0.8).setScrollFactor(0).setDepth(1001).setInteractive();
+    // 搖桿再次放大兩倍 (底座 200, 搖桿頭 100)
+    joystickBase = scene.add.circle(250, height - 250, 200, 0x888888, 0.5).setScrollFactor(0).setDepth(1000);
+    joystickThumb = scene.add.circle(250, height - 250, 100, 0xcccccc, 0.8).setScrollFactor(0).setDepth(1001).setInteractive();
     scene.input.setDraggable(joystickThumb);
     scene.input.on('drag', (pointer, gameObject, dragX, dragY) => {
         if (gameObject === joystickThumb) {
             const dx = dragX - joystickBase.x; const dy = dragY - joystickBase.y;
-            const dist = Math.min(Math.sqrt(dx * dx + dy * dy), 80);
+            const dist = Math.min(Math.sqrt(dx * dx + dy * dy), 160);
             const angle = Math.atan2(dy, dx);
             gameObject.x = joystickBase.x + Math.cos(angle) * dist;
             gameObject.y = joystickBase.y + Math.sin(angle) * dist;
-            mobileInput.left = (dx < -30); mobileInput.right = (dx > 30); mobileInput.up = (dy < -30);
+            mobileInput.left = (dx < -60); mobileInput.right = (dx > 60); mobileInput.up = (dy < -60);
         }
     });
     scene.input.on('dragend', () => {
         joystickThumb.x = joystickBase.x; joystickThumb.y = joystickBase.y;
         mobileInput.left = mobileInput.right = mobileInput.up = false;
     });
-    // 放大動作按鈕位置與尺寸 (半徑改為 70)
-    const rx = width - 120; const ry = height - 120;
-    createBtn(scene, rx, ry - 200, 'MG', 0xffff00, 'fireMg');
-    createBtn(scene, rx - 160, ry - 140, 'SG', 0x00ff00, 'fireSg');
-    createBtn(scene, rx - 200, ry, 'SN', 0x00ffff, 'fireSn');
+    // 動作按鈕位置與尺寸放大兩倍 (半徑改為 140)
+    const rx = width - 200; const ry = height - 200;
+    createBtn(scene, rx, ry - 350, 'MG', 0xffff00, 'fireMg');
+    createBtn(scene, rx - 300, ry - 250, 'SG', 0x00ff00, 'fireSg');
+    createBtn(scene, rx - 350, ry, 'SN', 0x00ffff, 'fireSn');
     createBtn(scene, rx, ry, 'RE', 0xff00ff, 'reload');
 }
 
 function createBtn(scene, x, y, label, color, key) {
-    // 按鈕半徑放大至 70
-    const b = scene.add.circle(x, y, 70, color, 0.6).setScrollFactor(0).setDepth(1000).setInteractive();
-    // 文字放大至 24px
-    const t = scene.add.text(x, y, label, { fontSize: '24px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(1001);
+    // 按鈕半徑放大至 140
+    const b = scene.add.circle(x, y, 140, color, 0.6).setScrollFactor(0).setDepth(1000).setInteractive();
+    // 文字放大至 40px
+    const t = scene.add.text(x, y, label, { fontSize: '40px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(1001);
     b.on('pointerdown', () => { mobileInput[key] = true; b.setAlpha(0.9); });
     b.on('pointerup', () => { mobileInput[key] = false; b.setAlpha(0.6); });
     b.on('pointerout', () => { mobileInput[key] = false; b.setAlpha(0.6); });
