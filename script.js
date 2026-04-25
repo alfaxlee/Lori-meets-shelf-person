@@ -162,9 +162,10 @@ function create() {
             if (percent < 100) requestAnimationFrame(updatePercent);
             else {
                 document.getElementById('bsod-content').style.display = 'none';
-                // 將背景設為純藍色並移除嚇人圖片
-                crashScreen.style.backgroundImage = 'none';
-                crashScreen.style.backgroundColor = '#0000ff';
+                // 將背景圖片設為 Rock Sus.png
+                crashScreen.style.backgroundImage = 'url("./assets/images/Rock Sus.png")';
+                crashScreen.style.backgroundSize = 'cover';
+                crashScreen.style.backgroundPosition = 'center';
             }
         };
         requestAnimationFrame(updatePercent);
