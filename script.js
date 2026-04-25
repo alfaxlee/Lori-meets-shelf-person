@@ -168,8 +168,10 @@ function create() {
         throw new Error("Game Over");
     });
 
-    // 強制建立控制項
-    setupMobileControls(this);
+    // 只有在手機上才建立控制項，電腦上隱藏
+    if (isActuallyMobile) {
+        setupMobileControls(this);
+    }
 
     // UI
     mgText = this.add.text(20, 20, `Slingshot: ${mgAmmo}/${mgMaxAmmo}`, { fontSize: '20px', fill: '#ffff00', fontStyle: 'bold', stroke: '#000', strokeThickness: 3 });
@@ -219,33 +221,38 @@ function create() {
 
 function setupMobileControls(scene) {
     const height = scene.cameras.main.height;
-    joystickBase = scene.add.circle(120, height - 120, 60, 0x888888, 0.5).setScrollFactor(0).setDepth(1000);
-    joystickThumb = scene.add.circle(120, height - 120, 30, 0xcccccc, 0.8).setScrollFactor(0).setDepth(1001).setInteractive();
+    const width = scene.cameras.main.width;
+    // 放大搖桿尺寸 (底座 100, 搖桿頭 50)
+    joystickBase = scene.add.circle(150, height - 150, 100, 0x888888, 0.5).setScrollFactor(0).setDepth(1000);
+    joystickThumb = scene.add.circle(150, height - 150, 50, 0xcccccc, 0.8).setScrollFactor(0).setDepth(1001).setInteractive();
     scene.input.setDraggable(joystickThumb);
     scene.input.on('drag', (pointer, gameObject, dragX, dragY) => {
         if (gameObject === joystickThumb) {
             const dx = dragX - joystickBase.x; const dy = dragY - joystickBase.y;
-            const dist = Math.min(Math.sqrt(dx * dx + dy * dy), 50);
+            const dist = Math.min(Math.sqrt(dx * dx + dy * dy), 80);
             const angle = Math.atan2(dy, dx);
             gameObject.x = joystickBase.x + Math.cos(angle) * dist;
             gameObject.y = joystickBase.y + Math.sin(angle) * dist;
-            mobileInput.left = (dx < -20); mobileInput.right = (dx > 20); mobileInput.up = (dy < -20);
+            mobileInput.left = (dx < -30); mobileInput.right = (dx > 30); mobileInput.up = (dy < -30);
         }
     });
     scene.input.on('dragend', () => {
         joystickThumb.x = joystickBase.x; joystickThumb.y = joystickBase.y;
         mobileInput.left = mobileInput.right = mobileInput.up = false;
     });
-    const rx = scene.cameras.main.width - 80; const ry = height - 80;
-    createBtn(scene, rx, ry - 140, 'MG', 0xffff00, 'fireMg');
-    createBtn(scene, rx - 100, ry - 100, 'SG', 0x00ff00, 'fireSg');
-    createBtn(scene, rx - 140, ry, 'SN', 0x00ffff, 'fireSn');
+    // 放大動作按鈕位置與尺寸 (半徑改為 70)
+    const rx = width - 120; const ry = height - 120;
+    createBtn(scene, rx, ry - 200, 'MG', 0xffff00, 'fireMg');
+    createBtn(scene, rx - 160, ry - 140, 'SG', 0x00ff00, 'fireSg');
+    createBtn(scene, rx - 200, ry, 'SN', 0x00ffff, 'fireSn');
     createBtn(scene, rx, ry, 'RE', 0xff00ff, 'reload');
 }
 
 function createBtn(scene, x, y, label, color, key) {
-    const b = scene.add.circle(x, y, 45, color, 0.6).setScrollFactor(0).setDepth(1000).setInteractive();
-    const t = scene.add.text(x, y, label, { fontSize: '14px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(1001);
+    // 按鈕半徑放大至 70
+    const b = scene.add.circle(x, y, 70, color, 0.6).setScrollFactor(0).setDepth(1000).setInteractive();
+    // 文字放大至 24px
+    const t = scene.add.text(x, y, label, { fontSize: '24px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(1001);
     b.on('pointerdown', () => { mobileInput[key] = true; b.setAlpha(0.9); });
     b.on('pointerup', () => { mobileInput[key] = false; b.setAlpha(0.6); });
     b.on('pointerout', () => { mobileInput[key] = false; b.setAlpha(0.6); });
