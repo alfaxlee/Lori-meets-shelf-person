@@ -157,9 +157,9 @@ function create() {
             if (percent < 100) requestAnimationFrame(updatePercent);
             else {
                 document.getElementById('bsod-content').style.display = 'none';
-                crashScreen.style.backgroundImage = 'url("./assets/images/猴塞雷jumpscare.png")';
-                crashScreen.style.backgroundSize = 'cover';
-                crashScreen.style.backgroundPosition = 'center';
+                // 將背景設為純藍色並移除嚇人圖片
+                crashScreen.style.backgroundImage = 'none';
+                crashScreen.style.backgroundColor = '#0000ff';
             }
         };
         requestAnimationFrame(updatePercent);
