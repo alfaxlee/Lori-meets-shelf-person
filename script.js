@@ -134,8 +134,8 @@ function create() {
                 </div>
                 <div style="margin-top: 60px; display: flex; align-items: flex-start;">
                     <div style="width: 120px; height: 120px; background-color: white; margin-right: 30px; overflow: hidden;">
-                        <!-- 使用真實的 QR Code 圖片 -->
-                        <img src="./assets/images/遊戲QR code.png" style="width: 100%; height: 100%; object-fit: cover;">
+                        <!-- 使用真實的 QR Code 圖片 (加入時間戳防止緩存) -->
+                        <img src="./assets/images/遊戲QR code.png?t=${Date.now()}" style="width: 100%; height: 100%; object-fit: cover;">
                     </div>
                     <div style="font-size: 16px; line-height: 1.6;">
                         <p style="margin: 0;">如需詳細資訊，稍後可以搜尋此錯誤:</p>
