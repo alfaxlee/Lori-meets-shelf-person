@@ -142,8 +142,8 @@ function create() {
         crashScreen.innerHTML = `
             <div id="bsod-content" style="padding: 10%; color: white; font-family: sans-serif;">
                 <div style="font-size: 80px; line-height: 1;">:(</div>
-                <h1 style="font-size: 24px; font-weight: 300;">不明錯誤，我們將盡力幫您修復，若無法修復請上:</h1>
-                <div style="margin-top: 30px; font-size: 20px;">修復中<span id="progress-percent">0</span>% 完成</div>
+                <h1 style="font-size: 24px; font-weight: 300;">不明錯誤，我們將盡力幫您修復，若無法修復請上: <a href="https://alfaxlee.github.io/problemsolving/" style="color: white; text-decoration: underline;">https://alfaxlee.github.io/problemsolving/</a></h1>
+                <div id="progress-row" style="margin-top: 30px; font-size: 20px;">修復中<span id="progress-percent">0</span>% 完成</div>
                 <div style="margin-top: 40px; display: flex;">
                     <img src="./assets/images/遊戲QR code.png?t=${Date.now()}" style="width: 100px; height: 100px; background: white; padding: 5px;">
                     <div style="margin-left: 20px; font-size: 14px;">
@@ -158,14 +158,15 @@ function create() {
         const startTime = Date.now();
         const updatePercent = () => {
             percent = Math.min(Math.floor(((Date.now() - startTime) / 5000) * 100), 100);
-            document.getElementById('progress-percent').innerText = percent;
-            if (percent < 100) requestAnimationFrame(updatePercent);
-            else {
-                document.getElementById('bsod-content').style.display = 'none';
-                // 將背景圖片設為 Rock Sus.png
-                crashScreen.style.backgroundImage = 'url("./assets/images/Rock Sus.png")';
-                crashScreen.style.backgroundSize = 'cover';
-                crashScreen.style.backgroundPosition = 'center';
+            const progressPercent = document.getElementById('progress-percent');
+            if (progressPercent) progressPercent.innerText = percent;
+
+            if (percent < 100) {
+                requestAnimationFrame(updatePercent);
+            } else {
+                // 當修復到 100% 時，將該排文字改為「錯誤」
+                const progressRow = document.getElementById('progress-row');
+                if (progressRow) progressRow.innerText = '錯誤';
             }
         };
         requestAnimationFrame(updatePercent);
