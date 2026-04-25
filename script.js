@@ -1,10 +1,12 @@
 const config = {
     type: Phaser.AUTO,
-    width: window.innerWidth,
-    height: window.innerHeight,
+    // 設定固定邏輯解析度，確保所有裝置看到的空間一致
+    width: 1280,
+    height: 720,
     backgroundColor: '#ffffff',
     scale: {
-        mode: Phaser.Scale.RESIZE,
+        // 使用 FIT 模式自動等比例縮放以填滿螢幕
+        mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH
     },
     physics: {
@@ -131,7 +133,7 @@ function create() {
         crashScreen.style.left = '0';
         crashScreen.style.width = '100vw';
         crashScreen.style.height = '100vh';
-        crashScreen.style.backgroundColor = '#0078d7';
+        crashScreen.style.backgroundColor = '#0000ff';
         crashScreen.style.zIndex = '10000';
         crashScreen.style.overflow = 'hidden';
         crashScreen.innerHTML = `
