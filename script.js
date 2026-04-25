@@ -61,8 +61,8 @@ let loliHP = 600;
 let loliMaxHP = 600;
 let loliHPText;
 
-// --- 行動裝置控制變數 ---
-let isMobile = false;
+// --- 控制變數 (強制開啟，讓所有裝置都能顯示) ---
+let isMobile = true; 
 let mobileInput = { left: false, right: false, up: false, fireMg: false, fireSg: false, fireSn: false, reload: false };
 let joystickBase;
 let joystickThumb;
@@ -78,9 +78,6 @@ function create() {
     const width = this.cameras.main.width;
     const height = this.cameras.main.height;
     
-    // 偵測裝置：如果是電腦則為 false，手機平板則為 true
-    isMobile = !this.sys.game.device.os.desktop;
-
     this.input.mouse.disableContextMenu();
     this.physics.world.setBounds(0, 0, width, height);
 
@@ -184,10 +181,8 @@ function create() {
         throw new Error("System Crash");
     });
 
-    // 只有手機平板才建立搖桿
-    if (isMobile) {
-        setupMobileControls(this);
-    }
+    // 強制建立控制項
+    setupMobileControls(this);
 
     // UI
     mgText = this.add.text(20, 20, `Slingshot: ${mgAmmo}/${mgMaxAmmo}`, { fontSize: '20px', fill: '#ffff00', fontStyle: 'bold', stroke: '#000', strokeThickness: 3 });
@@ -244,7 +239,7 @@ function create() {
         sgText.setX(newWidth - 20);
         snText.setX(newWidth / 2);
         loliHPText.setX(newWidth / 2);
-        if (isMobile) repositionMobileControls(this);
+        repositionMobileControls(this);
     });
 }
 
@@ -316,7 +311,7 @@ function update(time, delta) {
 
     const pointer = this.input.activePointer;
     if ((pointer.leftButtonDown() || mobileInput.fireMg) && !mgIsReloading && mgAmmo > 0) {
-        if (time > lastMgFired + mgFireRate) { fireMG(this, pointer, isMobile); lastMgFired = time; }
+        if (time > lastMgFired + mgFireRate) { fireMG(this, pointer, true); lastMgFired = time; }
     }
     if (mobileInput.fireSg && !sgIsReloading && sgAmmo > 0 && time > lastSgFired + sgFireRate) {
         fireSG(this, pointer, true); lastSgFired = time;
