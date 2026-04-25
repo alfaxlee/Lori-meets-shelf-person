@@ -105,48 +105,109 @@ function create() {
         this.physics.pause();
         this.scene.pause();
         
-        // 建立一個覆蓋全螢幕的當機畫面 (模擬經典藍屏 BSOD 改為猴塞雷 Jumpscare)
+        // 建立一個覆蓋全螢幕的當機畫面
         const crashScreen = document.createElement('div');
+        crashScreen.id = 'crash-screen';
         crashScreen.style.position = 'fixed';
         crashScreen.style.top = '0';
         crashScreen.style.left = '0';
         crashScreen.style.width = '100vw';
         crashScreen.style.height = '100vh';
-        crashScreen.style.backgroundImage = 'url("./assets/猴塞雷jumpscare.png")'; // 設定 Jumpscare 圖片
-        crashScreen.style.backgroundSize = 'cover';
-        crashScreen.style.backgroundPosition = 'center';
+        crashScreen.style.backgroundColor = '#0078d7'; // 初始為 Windows 藍屏色
         crashScreen.style.color = 'white';
         crashScreen.style.padding = '10%';
-        crashScreen.style.fontFamily = 'Segoe UI, Arial, sans-serif';
+        crashScreen.style.fontFamily = '"Segoe UI", "Microsoft JhengHei", Arial, sans-serif';
         crashScreen.style.zIndex = '10000';
-        crashScreen.style.cursor = 'none'; // 隱藏滑鼠，增加當機感
-        crashScreen.style.textShadow = '2px 2px 4px rgba(0,0,0,0.8)'; // 增加文字陰影以利在圖片上閱讀
+        crashScreen.style.cursor = 'none';
+        crashScreen.style.overflow = 'hidden';
         
+        // 加入動態百分比與 BSOD 內容
         crashScreen.innerHTML = `
-            <div style="font-size: 120px; margin-bottom: 20px;">:(</div>
-            <h1 style="font-size: 30px; font-weight: normal; line-height: 1.4;">
-                您的網頁發生問題，需要重新整理。<br>
-                我們只收集了一些錯誤資訊，然後您就可以重新整理。
-            </h1>
-            <div style="margin-top: 40px; font-size: 20px;">
-                0% 完成
-            </div>
-            <div style="margin-top: 50px; display: flex; align-items: flex-start;">
-                <div style="width: 100px; height: 100px; background-color: white; margin-right: 20px;">
-                    <!-- 模擬二維碼區域 -->
-                    <div style="width: 100%; height: 100%; background: repeating-conic-gradient(#333 0% 25%, white 0% 50%) 50% / 20px 20px;"></div>
+            <div id="bsod-content" style="transition: transform 0.05s; position: relative; z-index: 2;">
+                <div style="font-size: 140px; margin-bottom: 20px; line-height: 1;">:(</div>
+                <h1 style="font-size: 32px; font-weight: 300; line-height: 1.4; max-width: 800px;">
+                    您的電腦發生問題，因此必須重新啟動。<br>
+                    我們剛好正在收集某些錯誤資訊，接著我們會為您重新啟動。
+                </h1>
+                <div style="margin-top: 40px; font-size: 28px; font-weight: 300;">
+                    <span id="progress-percent">0</span>% 完成
                 </div>
-                <div>
-                    <p style="margin: 0; font-size: 16px;">如果您想了解更多資訊，可以稍後在線上搜尋此錯誤:</p>
-                    <p style="margin: 5px 0 0 0; font-size: 18px; font-weight: bold;">LOLI_CAUGHT_YOU_CRITICAL_PROCESS_DIED</p>
+                <div style="margin-top: 60px; display: flex; align-items: flex-start;">
+                    <div style="width: 120px; height: 120px; background-color: white; margin-right: 30px; overflow: hidden;">
+                        <!-- 使用真實的 QR Code 圖片 -->
+                        <img src="./assets/images/遊戲QR code.png" style="width: 100%; height: 100%; object-fit: cover;">
+                    </div>
+                    <div style="font-size: 16px; line-height: 1.6;">
+                        <p style="margin: 0;">如需詳細資訊，稍後可以搜尋此錯誤:</p>
+                        <p style="margin: 10px 0 0 0; font-size: 20px; font-weight: 600;">CRITICAL_PROCESS_DIED_BY_LOLI</p>
+                    </div>
                 </div>
             </div>
-            <p style="margin-top: 50px; font-size: 18px;">請按下瀏覽器的「重新整理」按鈕以重啟遊戲。</p>
+            <!-- 故障層 -->
+            <div id="glitch-overlay" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 255, 0, 0.03)); background-size: 100% 4px, 3px 100%; z-index: 3;"></div>
         `;
         
         document.body.appendChild(crashScreen);
+
+        // --- 逼真動態效果實作 ---
+        let percent = 0;
+        const percentElement = document.getElementById('progress-percent');
+        const contentElement = document.getElementById('bsod-content');
         
-        // 拋出一個錯誤來中斷後續的 JavaScript 執行
+        const startTime = Date.now();
+        const duration = 5000; // 5 秒內跑完
+
+        // 1. 五秒百分比進度邏輯
+        const updatePercent = () => {
+            const elapsed = Date.now() - startTime;
+            percent = Math.min(Math.floor((elapsed / duration) * 100), 100);
+            percentElement.innerText = percent;
+            
+            if (percent < 100) {
+                requestAnimationFrame(updatePercent);
+            } else {
+                // --- 進度到達 100% 時切換背景並隱藏文字 ---
+                contentElement.style.display = 'none'; // 隱藏所有文字與 QR Code
+                crashScreen.style.backgroundColor = 'transparent';
+                crashScreen.style.backgroundImage = 'url("./assets/images/猴塞雷jumpscare.png")';
+                crashScreen.style.backgroundSize = 'cover';
+                crashScreen.style.backgroundPosition = 'center';
+                
+                // 加強閃爍效果
+                triggerFinalGlitch();
+                clearInterval(glitchInterval); // 停止故障效果計時器
+            }
+        };
+        requestAnimationFrame(updatePercent);
+
+        // 2. 隨機畫面閃爍 (Glitch Effect)
+        const glitchInterval = setInterval(() => {
+            if (Math.random() > 0.9) {
+                contentElement.style.transform = `translate(${Math.random() * 6 - 3}px, ${Math.random() * 6 - 3}px)`;
+                if (percent < 100) {
+                    crashScreen.style.filter = `hue-rotate(${Math.random() * 10 - 5}deg) brightness(${1 + Math.random() * 0.1})`;
+                }
+            } else {
+                contentElement.style.transform = 'translate(0,0)';
+                if (percent < 100) crashScreen.style.filter = 'none';
+            }
+        }, 50);
+
+        // 3. 最終閃爍 (切換圖片時)
+        function triggerFinalGlitch() {
+            let count = 0;
+            const finalGlitch = setInterval(() => {
+                crashScreen.style.filter = count % 2 === 0 ? 'invert(1) contrast(2)' : 'none';
+                count++;
+                if (count > 6) {
+                    clearInterval(finalGlitch);
+                    crashScreen.style.filter = 'none';
+                }
+            }, 50);
+        }
+
+        // 拋出一個錯誤來中斷執行
+        console.error("KERNEL_SECURITY_CHECK_FAILURE (loli.sys)");
         throw new Error("System Crash: Player caught by loli.");
     });
 
