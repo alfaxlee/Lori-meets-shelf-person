@@ -238,6 +238,12 @@ function create() {
         if (loliHP <= 0) {
             target.setActive(false).setVisible(false).body.enable = false;
             scene.cameras.main.flash(500, 255, 0, 0);
+
+            // 羅莉死後立刻清除羅莉發出的所有攻擊，但不清除玩家的子彈
+            if (shockwaves) shockwaves.clear(true, true);
+            if (lasers) lasers.clear(true, true);
+            if (enemyBalls) enemyBalls.clear(true, true);
+
             scene.time.delayedCall(3000, () => {
                 loliHP = loliMaxHP; loliHPText.setText(`蘿莉血量: ${loliHP}`);
                 target.setActive(true).setVisible(true).body.enable = true;
