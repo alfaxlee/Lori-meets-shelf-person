@@ -58,6 +58,8 @@ let lastSnFired = 0;
 let snFireRate = 1500; 
 let snText;
 let shockwaves; // 衝擊波群組
+let lasers;    // 雷射攻擊群組
+let enemyBalls; // 敵人彈跳球群組
 
 // --- 蘿莉遇櫃人 血量與狀態變數 ---
 let loliHP = 600;
@@ -100,6 +102,8 @@ function create() {
     sgBullets = this.physics.add.group();
     snBullets = this.physics.add.group();
     shockwaves = this.physics.add.group(); // 初始化衝擊波群組
+    lasers = this.physics.add.group();     // 初始化雷射攻擊群組
+    enemyBalls = this.physics.add.group(); // 初始化敵人彈跳球群組
 
     player = this.physics.add.sprite(width / 2, height - 150, '胖嘟嘟發電機');
     player.setScale(0.1);
@@ -123,15 +127,22 @@ function create() {
     this.physics.add.collider(sgBullets, platforms);
     this.physics.add.collider(snBullets, platforms, (bullet) => { bullet.destroy(); });
 
+    // 敵人彈跳球碰撞邏輯
+    this.physics.add.collider(enemyBalls, platforms); // 碰到地板會反彈
+    this.physics.add.collider(enemyBalls, [mgBullets, sgBullets, snBullets], (ball, bullet) => {
+        bullet.destroy(); // 玩家子彈消失
+        // ball 會因為 collider 自然反彈
+    });
+
     this.physics.world.on('worldbounds', (body) => {
         const obj = body.gameObject;
-        if (obj && (mgBullets.contains(obj) || sgBullets.contains(obj) || snBullets.contains(obj) || shockwaves.contains(obj))) {
-            obj.destroy();
+        if (obj && (mgBullets.contains(obj) || sgBullets.contains(obj) || snBullets.contains(obj) || shockwaves.contains(obj) || enemyBalls.contains(obj))) {
+            obj.destroy(); // 子彈或彈跳球碰到牆壁 (世界邊界) 就消失
         }
     });
 
-    // 當機畫面
-    const triggerBSOD = () => {
+    // 當機畫面 (處理玩家死亡/受傷)
+    const triggerCrash = () => {
         this.physics.pause();
         this.scene.pause();
         const crashScreen = document.createElement('div');
@@ -171,11 +182,32 @@ function create() {
             }
         };
         requestAnimationFrame(updatePercent);
-        throw new Error("Game Over");
     };
 
-    this.physics.add.collider(player, loli, triggerBSOD);
-    this.physics.add.overlap(player, shockwaves, triggerBSOD); // 玩家碰到衝擊波也會當機
+    this.physics.add.collider(player, loli, triggerCrash);
+    this.physics.add.overlap(player, shockwaves, triggerCrash); // 玩家碰到衝擊波也會當機
+    this.physics.add.overlap(player, lasers, triggerCrash);     // 玩家碰到紫色雷射也會當機
+    this.physics.add.overlap(player, enemyBalls, triggerCrash); // 玩家碰到彈跳球也會當機
+
+    // 設定隨機雷射計時器 (3-7 秒觸發一次)
+    const scheduleNextLaser = () => {
+        const delay = Phaser.Math.Between(3000, 7000);
+        this.time.delayedCall(delay, () => {
+            spawnLaser(this, triggerCrash);
+            scheduleNextLaser();
+        });
+    };
+    scheduleNextLaser();
+
+    // 設定敵人彈跳球計時器 (10-15 秒觸發一次)
+    const scheduleNextBall = () => {
+        const delay = Phaser.Math.Between(10000, 15000);
+        this.time.delayedCall(delay, () => {
+            spawnEnemyBall(this);
+            scheduleNextBall();
+        });
+    };
+    scheduleNextBall();
 
     // 只有在手機上才建立控制項，電腦上隱藏
     if (isActuallyMobile) {
@@ -446,4 +478,73 @@ function fireSN(scene, pointer, autoAim) {
         bullet.setCollideWorldBounds(true); bullet.body.onWorldBounds = true; snAmmo--; snText.setText(`Sniper: ${snAmmo}/${snMaxAmmo}`);
         if (snAmmo <= 0) triggerReload(scene, 'sn'); // 只填裝狙擊槍
     }
+}
+
+/**
+ * 隨機天降雷射攻擊
+ * @param {Phaser.Scene} scene - Phaser 場景實例
+ */
+function spawnLaser(scene) {
+    const laserCount = Phaser.Math.Between(1, 3); // 隨機 1 到 3 條
+    const width = scene.cameras.main.width;
+    const height = scene.cameras.main.height;
+
+    for (let i = 0; i < laserCount; i++) {
+        const randomX = Phaser.Math.Between(50, 1230); // 隨機 X 位置
+
+        // 預警階段：閃爍的紅線
+        const warningLine = scene.add.rectangle(randomX, height / 2, 2, height, 0xff0000, 0.5);
+        
+        // 快速閃爍效果 (1秒)
+        scene.tweens.add({
+            targets: warningLine,
+            alpha: 0,
+            duration: 100,
+            yoyo: true,
+            repeat: 5, // 100ms * 2 (yoyo) * 5 = 1000ms
+            onComplete: () => {
+                warningLine.destroy(); // 移除預警線
+
+                // 攻擊階段：降下雷射 (寬 25px，使用要求的顏色 #ff00ff)
+                const laser = scene.add.rectangle(randomX, height / 2, 25, height, 0xff00ff);
+                scene.physics.add.existing(laser);
+                lasers.add(laser);
+
+                laser.body.allowGravity = false;
+                laser.body.setImmovable(true);
+
+                // 雷射攻擊持續 0.5 秒後消失
+                scene.time.delayedCall(500, () => {
+                    laser.destroy();
+                });
+            }
+        });
+    }
+}
+
+/**
+ * 隨機投擲彈跳球攻擊
+ * @param {Phaser.Scene} scene - Phaser 場景實例
+ */
+function spawnEnemyBall(scene) {
+    if (!loli.active) return;
+    
+    // 從敵人的位置出發
+    const x = loli.x;
+    const y = loli.y;
+    
+    // 建立 ff00ff 的圓球 (半徑 15)
+    const ball = scene.add.circle(x, y, 15, 0xff00ff);
+    scene.physics.add.existing(ball);
+    enemyBalls.add(ball);
+    
+    // 隨機角度投擲 (0 到 360 度)
+    const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+    const speed = 400;
+    
+    // 設定物理屬性
+    ball.body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+    ball.body.setBounce(1, 1); // 完全彈跳
+    ball.body.setCollideWorldBounds(true);
+    ball.body.onWorldBounds = true; // 觸發事件以利碰到牆壁銷毀
 }
