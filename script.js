@@ -386,18 +386,30 @@ function createShockwaves(scene, x, y, fallHeight) {
     });
 }
 
-function triggerReload(scene) {
-    if (mgAmmo < mgMaxAmmo && !mgIsReloading) {
+function triggerReload(scene, weaponType) {
+    // 彈弓填裝 (Slingshot / MG)
+    if ((!weaponType || weaponType === 'mg') && mgAmmo < mgMaxAmmo && !mgIsReloading) {
         mgIsReloading = true; mgText.setText('RELOADING...');
-        scene.time.delayedCall(3000, () => { mgAmmo = mgMaxAmmo; mgIsReloading = false; mgText.setText(`Slingshot: ${mgAmmo}/${mgMaxAmmo}`); });
+        scene.time.delayedCall(3000, () => { 
+            mgAmmo = mgMaxAmmo; mgIsReloading = false; 
+            mgText.setText(`Slingshot: ${mgAmmo}/${mgMaxAmmo}`); 
+        });
     }
-    if (sgAmmo < sgMaxAmmo && !sgIsReloading) {
+    // 霰彈槍填裝 (Shotgun / SG)
+    if ((!weaponType || weaponType === 'sg') && sgAmmo < sgMaxAmmo && !sgIsReloading) {
         sgIsReloading = true; sgText.setText('RELOADING...');
-        scene.time.delayedCall(1000, () => { sgAmmo = sgMaxAmmo; sgIsReloading = false; sgText.setText(`Shotgun: ${sgAmmo}/${sgMaxAmmo}`); });
+        scene.time.delayedCall(1000, () => { 
+            sgAmmo = sgMaxAmmo; sgIsReloading = false; 
+            sgText.setText(`Shotgun: ${sgAmmo}/${sgMaxAmmo}`); 
+        });
     }
-    if (snAmmo < snMaxAmmo && !snIsReloading) {
+    // 狙擊槍填裝 (Sniper / SN)
+    if ((!weaponType || weaponType === 'sn') && snAmmo < snMaxAmmo && !snIsReloading) {
         snIsReloading = true; snText.setText('RELOADING...');
-        scene.time.delayedCall(5000, () => { snAmmo = snMaxAmmo; snIsReloading = false; snText.setText(`Sniper: ${snAmmo}/${snMaxAmmo}`); });
+        scene.time.delayedCall(5000, () => { 
+            snAmmo = snMaxAmmo; snIsReloading = false; 
+            snText.setText(`Sniper: ${snAmmo}/${snMaxAmmo}`); 
+        });
     }
 }
 
@@ -407,7 +419,7 @@ function fireMG(scene, pointer, autoAim) {
     if (bullet) {
         bullet.setScale(0.05).setVelocity(Math.cos(angle) * 1200, Math.sin(angle) * 1200).setCollideWorldBounds(true).setBounce(1);
         bullet.body.onWorldBounds = true; mgAmmo--; mgText.setText(`Slingshot: ${mgAmmo}/${mgMaxAmmo}`);
-        if (mgAmmo <= 0) triggerReload(scene);
+        if (mgAmmo <= 0) triggerReload(scene, 'mg'); // 只填裝彈弓
     }
 }
 
@@ -423,7 +435,7 @@ function fireSG(scene, pointer, autoAim) {
         }
     }
     sgAmmo -= 5; if (sgAmmo < 0) sgAmmo = 0; sgText.setText(`Shotgun: ${sgAmmo}/${sgMaxAmmo}`);
-    if (sgAmmo <= 0) triggerReload(scene);
+    if (sgAmmo <= 0) triggerReload(scene, 'sg'); // 只填裝霰彈槍
 }
 
 function fireSN(scene, pointer, autoAim) {
@@ -432,6 +444,6 @@ function fireSN(scene, pointer, autoAim) {
     if (bullet) {
         bullet.setScale(0.1, 0.025).setRotation(angle).setVelocity(Math.cos(angle) * 1500, Math.sin(angle) * 1500).body.allowGravity = false;
         bullet.setCollideWorldBounds(true); bullet.body.onWorldBounds = true; snAmmo--; snText.setText(`Sniper: ${snAmmo}/${snMaxAmmo}`);
-        if (snAmmo <= 0) triggerReload(scene);
+        if (snAmmo <= 0) triggerReload(scene, 'sn'); // 只填裝狙擊槍
     }
 }
