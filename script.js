@@ -78,6 +78,7 @@ function preload() {
     this.load.image('地板', 'https://tse1.explicit.bing.net/th/id/OIP.PU9mfnoeDIY56du54-AHxAHaE7?rs=1&pid=ImgDetMain&o=7&rm=3');
     this.load.image('shabi', './assets/images/shabi.png');
     this.load.image('蘿莉遇櫃人', './assets/images/羅莉抓人.png');
+    this.load.image('loliWin', './assets/images/蘿莉過關圖.png'); // 載入狂暴模式背景圖 (蘿莉過關圖)
 }
 
 function create() {
@@ -249,8 +250,12 @@ function create() {
                 target.setActive(true).setVisible(true).body.enable = true;
                 target.setPosition(scene.cameras.main.width / 4, scene.cameras.main.height - 150);
                 
-                // 復活後取消狂暴模式
+                // 復活後取消狂暴模式並清除相關場景物件
                 target.isBerserk = false;
+                if (scene.berserkBg) { scene.berserkBg.destroy(); scene.berserkBg = null; }
+                if (scene.berserkCeiling) { scene.berserkCeiling.destroy(); scene.berserkCeiling = null; }
+                if (scene.berserkFloor) { scene.berserkFloor.destroy(); scene.berserkFloor = null; }
+
                 target.body.allowGravity = true; // 恢復重力
                 target.clearTint();              // 清除紅色濾鏡
                 scheduleNextLaser();             // 重啟一般模式雷射計時器
@@ -377,6 +382,27 @@ function update(time, delta) {
             loli.isBerserk = true;
             loli.body.allowGravity = false; // 進入飛行模式，取消重力
             loli.setTint(0xff0000);        // 變色提醒
+
+            // 建立狂暴模式背景 (#ff00ff)
+            const width = this.cameras.main.width;
+            const height = this.cameras.main.height;
+
+            // 設置狂暴背景圖 (使用蘿莉過關圖)
+            this.berserkBg = this.add.image(width / 2, height / 2, 'loliWin').setDepth(-1);
+            this.berserkBg.setDisplaySize(width, height);
+            
+            // 建立上方天花板
+            this.berserkCeiling = this.add.rectangle(width / 2, 10, width, 20, 0xff00ff);
+            this.physics.add.existing(this.berserkCeiling, true); // 靜態物體
+            
+            // 建立下方地板 (覆蓋原本的地板)
+            this.berserkFloor = this.add.rectangle(width / 2, height - 50, width, 40, 0xff00ff);
+            this.physics.add.existing(this.berserkFloor, true); // 靜態物體
+
+            // 設定玩家與羅莉與新地板/天花板的碰撞
+            this.physics.add.collider(player, [this.berserkCeiling, this.berserkFloor]);
+            this.physics.add.collider(loli, [this.berserkCeiling, this.berserkFloor]);
+
             // 立即啟動狂暴模式的連鎖雷射
             spawnLaser(this);
         }
