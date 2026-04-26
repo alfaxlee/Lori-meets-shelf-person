@@ -57,6 +57,7 @@ let snIsReloading = false;
 let lastSnFired = 0;
 let snFireRate = 1500; 
 let snText;
+let shockwaves; // 衝擊波群組
 
 // --- 蘿莉遇櫃人 血量與狀態變數 ---
 let loliHP = 600;
@@ -98,6 +99,7 @@ function create() {
     mgBullets = this.physics.add.group();
     sgBullets = this.physics.add.group();
     snBullets = this.physics.add.group();
+    shockwaves = this.physics.add.group(); // 初始化衝擊波群組
 
     player = this.physics.add.sprite(width / 2, height - 150, '胖嘟嘟發電機');
     player.setScale(0.1);
@@ -110,6 +112,8 @@ function create() {
     loli.setBounce(0.1);
     loli.isHit = false;
     loli.hitStunTimer = 0;
+    loli.wasInAir = false; // 追蹤蘿莉是否在空中
+    loli.highestY = 0;     // 追蹤在空中的最高點 (Y 越小越高)
 
     this.physics.add.collider(player, platforms);
     this.physics.add.collider(loli, platforms); 
@@ -121,13 +125,13 @@ function create() {
 
     this.physics.world.on('worldbounds', (body) => {
         const obj = body.gameObject;
-        if (obj && (mgBullets.contains(obj) || sgBullets.contains(obj) || snBullets.contains(obj))) {
+        if (obj && (mgBullets.contains(obj) || sgBullets.contains(obj) || snBullets.contains(obj) || shockwaves.contains(obj))) {
             obj.destroy();
         }
     });
 
     // 當機畫面
-    this.physics.add.collider(player, loli, () => {
+    const triggerBSOD = () => {
         this.physics.pause();
         this.scene.pause();
         const crashScreen = document.createElement('div');
@@ -172,7 +176,10 @@ function create() {
         };
         requestAnimationFrame(updatePercent);
         throw new Error("Game Over");
-    });
+    };
+
+    this.physics.add.collider(player, loli, triggerBSOD);
+    this.physics.add.overlap(player, shockwaves, triggerBSOD); // 玩家碰到衝擊波也會當機
 
     // 只有在手機上才建立控制項，電腦上隱藏
     if (isActuallyMobile) {
@@ -324,9 +331,63 @@ function update(time, delta) {
         } else {
             if (loli.x < player.x) loli.setVelocityX(200); else if (loli.x > player.x) loli.setVelocityX(-200);
             else loli.setVelocityX(0);
+            
+            // 偵測落地
+            if (loli.body.touching.down) {
+                if (loli.wasInAir) {
+                    const fallDistance = Math.max(0, loli.y - loli.highestY);
+                    createShockwaves(this, loli.x, loli.y + loli.displayHeight / 2, fallDistance);
+                    loli.wasInAir = false;
+                }
+            } else {
+                if (!loli.wasInAir) {
+                    loli.highestY = loli.y; // 開始跳躍/墜落時記錄起始高度
+                    loli.wasInAir = true;
+                } else {
+                    loli.highestY = Math.min(loli.highestY, loli.y); // 記錄在空中的最高點
+                }
+            }
+
             if (player.y < loli.y - 50 && loli.body.touching.down) loli.setVelocityY(-275);
         }
     }
+}
+
+// 建立落地衝擊波 (根據摔落高度決定大小)
+function createShockwaves(scene, x, y, fallHeight) {
+    // 根據高度計算縮放係數 (基本 0.5, 每 100 像素增加一些)
+    const scaleFactor = Math.min(2.5, 0.5 + (fallHeight / 200));
+    const directions = [-1, 1];
+    const angleRad = Phaser.Math.DegToRad(25); // 設定為 25 度
+    
+    directions.forEach(dir => {
+        // 基礎尺寸 80x40，再乘以縮放係數
+        const sw = scene.add.rectangle(x, y - 20, 80 * scaleFactor, 40 * scaleFactor, 0xffffff, 0.8);
+        scene.physics.add.existing(sw);
+        shockwaves.add(sw);
+        
+        sw.body.allowGravity = false;
+        // 速度隨高度增加，並使用三角函數計算 25 度角的分量
+        const speed = 400 + (fallHeight * 0.6);
+        sw.body.setVelocity(dir * speed * Math.cos(angleRad), -speed * Math.sin(angleRad));
+        
+        // 旋轉矩形使其對齊移動方向 (25 度)
+        // dir 為 1 時（右邊）旋轉為負，dir 為 -1 時（左邊）旋轉為正
+        const rotation = dir === 1 ? -angleRad : angleRad;
+        sw.setRotation(rotation);
+        
+        // 衝擊波生命週期：變大並淡出
+        scene.tweens.add({
+            targets: sw,
+            alpha: 0,
+            scaleX: 1.5,
+            scaleY: 1.5,
+            duration: 500 + (fallHeight * 0.5),
+            onComplete: () => {
+                sw.destroy();
+            }
+        });
+    });
 }
 
 function triggerReload(scene) {
