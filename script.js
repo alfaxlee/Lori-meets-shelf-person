@@ -135,25 +135,17 @@ function create() {
         this.physics.pause();
         this.scene.pause();
         const crashScreen = document.createElement('div');
-        crashScreen.style.position = 'fixed';
-        crashScreen.style.top = '0';
-        crashScreen.style.left = '0';
-        crashScreen.style.width = '100vw';
-        crashScreen.style.height = '100vh';
-        crashScreen.style.backgroundColor = '#0000ff';
-        crashScreen.style.zIndex = '10000';
-        crashScreen.style.overflow = 'hidden';
+        crashScreen.className = 'bsod-container'; // 使用 CSS class
         crashScreen.innerHTML = `
-            <div id="bsod-content" style="padding: 10%; color: white; font-family: sans-serif;">
-                <div style="font-size: 80px; line-height: 1;">:(</div>
-                <h1 style="font-size: 24px; font-weight: 300;">不明錯誤，我們將盡力幫您修復，若無法修復請上: <a href="https://alfaxlee.github.io/problemsolving/" style="color: white; text-decoration: underline;">https://alfaxlee.github.io/problemsolving/</a></h1>
-                <div id="progress-row" style="margin-top: 30px; font-size: 20px;">修復中<span id="progress-percent">0</span>% 完成</div>
-                <div style="margin-top: 40px; display: flex;">
-                    <!-- 將原本的 QR code 圖片改為 image.png -->
-                    <img src="./assets/images/image.png" style="width: 100px; height: 100px; background: white; padding: 5px;">
-                    <div style="margin-left: 20px; font-size: 14px;">
+            <div class="bsod-content">
+                <div class="bsod-smiley">:(</div>
+                <h1 class="bsod-message">不明錯誤，我們將盡力幫您修復，若無法修復請上: <a href="https://alfaxlee.github.io/problemsolving/">https://alfaxlee.github.io/problemsolving/</a></h1>
+                <div id="progress-row" class="bsod-progress">修復中<span id="progress-percent">0</span>% 完成</div>
+                <div class="bsod-footer">
+                    <img src="./assets/images/qr%20code.png" class="bsod-qr">
+                    <div class="bsod-details">
                         <p>搜尋此錯誤:</p>
-                        <p style="font-weight: bold;">CRITICAL_PROCESS_DIED_BY_LOLI</p>
+                        <p class="bsod-error-code">CRITICAL_PROCESS_DIED_BY_LOLI</p>
                     </div>
                 </div>
             </div>
@@ -169,9 +161,13 @@ function create() {
             if (percent < 100) {
                 requestAnimationFrame(updatePercent);
             } else {
-                // 當修復到 100% 時，將該排文字改為「錯誤」
+                // 當修復到 100% 時，背景切換為彩色電視，並將文字改為「錯誤」
+                crashScreen.classList.add('tv-background'); 
                 const progressRow = document.getElementById('progress-row');
-                if (progressRow) progressRow.innerText = '錯誤';
+                if (progressRow) {
+                    progressRow.innerText = '錯誤';
+                    progressRow.style.color = 'black'; // 背景變彩色後，黑色文字可能更清楚
+                }
             }
         };
         requestAnimationFrame(updatePercent);
