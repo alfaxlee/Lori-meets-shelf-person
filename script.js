@@ -118,6 +118,7 @@ function create() {
     loli.hitStunTimer = 0;
     loli.wasInAir = false; // 追蹤蘿莉是否在空中
     loli.highestY = 0;     // 追蹤在空中的最高點 (Y 越小越高)
+    loli.isBerserk = false; // 狂暴模式標記
 
     this.physics.add.collider(player, platforms);
     this.physics.add.collider(loli, platforms); 
@@ -184,24 +185,29 @@ function create() {
         requestAnimationFrame(updatePercent);
     };
 
-    this.physics.add.collider(player, loli, triggerCrash);
+    this.physics.add.collider(player, loli, () => {
+        if (!loli.isBerserk) triggerCrash(); // 狂暴模式下碰到玩家沒事
+    });
     this.physics.add.overlap(player, shockwaves, triggerCrash); // 玩家碰到衝擊波也會當機
     this.physics.add.overlap(player, lasers, triggerCrash);     // 玩家碰到紫色雷射也會當機
     this.physics.add.overlap(player, enemyBalls, triggerCrash); // 玩家碰到彈跳球也會當機
 
     // 設定隨機雷射計時器 (3-7 秒觸發一次)
     const scheduleNextLaser = () => {
+        // 如果進入狂暴模式，雷射邏輯會轉由 spawnLaser 內部連鎖觸發
+        if (loli.isBerserk) return; 
+
         const delay = Phaser.Math.Between(3000, 7000);
         this.time.delayedCall(delay, () => {
-            spawnLaser(this, triggerCrash);
+            spawnLaser(this);
             scheduleNextLaser();
         });
     };
     scheduleNextLaser();
 
-    // 設定敵人彈跳球計時器 (10-15 秒觸發一次)
+    // 設定敵人彈跳球計時器 (狂暴模式頻率上升)
     const scheduleNextBall = () => {
-        const delay = Phaser.Math.Between(10000, 15000);
+        const delay = loli.isBerserk ? 2000 : Phaser.Math.Between(10000, 15000);
         this.time.delayedCall(delay, () => {
             spawnEnemyBall(this);
             scheduleNextBall();
@@ -236,6 +242,12 @@ function create() {
                 loliHP = loliMaxHP; loliHPText.setText(`蘿莉血量: ${loliHP}`);
                 target.setActive(true).setVisible(true).body.enable = true;
                 target.setPosition(scene.cameras.main.width / 4, scene.cameras.main.height - 150);
+                
+                // 復活後取消狂暴模式
+                target.isBerserk = false;
+                target.body.allowGravity = true; // 恢復重力
+                target.clearTint();              // 清除紅色濾鏡
+                scheduleNextLaser();             // 重啟一般模式雷射計時器
             });
         }
         target.isHit = true; target.hitStunTimer = stunTime;
@@ -354,9 +366,24 @@ function update(time, delta) {
     }
 
     if (loli.active) {
+        // --- 狂暴模式狀態偵測 ---
+        if (loliHP < 150 && !loli.isBerserk) {
+            loli.isBerserk = true;
+            loli.body.allowGravity = false; // 進入飛行模式，取消重力
+            loli.setTint(0xff0000);        // 變色提醒
+            // 立即啟動狂暴模式的連鎖雷射
+            spawnLaser(this);
+        }
+
         if (loli.isHit) {
-            loli.hitStunTimer -= delta; if (loli.hitStunTimer <= 0) { loli.isHit = false; loli.clearTint(); }
+            loli.hitStunTimer -= delta; if (loli.hitStunTimer <= 0) { loli.isHit = false; loli.isBerserk ? loli.setTint(0xff0000) : loli.clearTint(); }
+        } else if (loli.isBerserk) {
+            // --- 狂暴飛行移動模式 ---
+            // 使用正弦波產生在空中的飛行軌跡 (x: 左右, y: 上下)
+            loli.setVelocityX(Math.sin(time / 500) * 400);
+            loli.setVelocityY(Math.cos(time / 1000) * 200);
         } else {
+            // --- 一般地面移動模式 ---
             if (loli.x < player.x) loli.setVelocityX(200); else if (loli.x > player.x) loli.setVelocityX(-200);
             else loli.setVelocityX(0);
             
@@ -485,9 +512,14 @@ function fireSN(scene, pointer, autoAim) {
  * @param {Phaser.Scene} scene - Phaser 場景實例
  */
 function spawnLaser(scene) {
-    const laserCount = Phaser.Math.Between(1, 3); // 隨機 1 到 3 條
-    const width = scene.cameras.main.width;
+    if (!loli.active) return;
+
+    // 狂暴模式固定 1 個雷射，一般模式隨機 1 到 3 個
+    const laserCount = loli.isBerserk ? 1 : Phaser.Math.Between(1, 3); 
     const height = scene.cameras.main.height;
+    
+    // 狂暴模式下預警時間減半 (0.5s)，一般模式 1s
+    const warningDuration = loli.isBerserk ? 50 : 100; // 配合 yoyo 和 repeat
 
     for (let i = 0; i < laserCount; i++) {
         const randomX = Phaser.Math.Between(50, 1230); // 隨機 X 位置
@@ -495,13 +527,13 @@ function spawnLaser(scene) {
         // 預警階段：閃爍的紅線
         const warningLine = scene.add.rectangle(randomX, height / 2, 2, height, 0xff0000, 0.5);
         
-        // 快速閃爍效果 (1秒)
+        // 快速閃爍效果
         scene.tweens.add({
             targets: warningLine,
             alpha: 0,
-            duration: 100,
+            duration: warningDuration,
             yoyo: true,
-            repeat: 5, // 100ms * 2 (yoyo) * 5 = 1000ms
+            repeat: 5, 
             onComplete: () => {
                 warningLine.destroy(); // 移除預警線
 
@@ -516,6 +548,12 @@ function spawnLaser(scene) {
                 // 雷射攻擊持續 0.5 秒後消失
                 scene.time.delayedCall(500, () => {
                     laser.destroy();
+                    
+                    // 狂暴模式：射完立刻提醒下一個雷射 (連鎖觸發)
+                    // 為了避免瞬間產生過多物件，只讓循環中的最後一個觸發下一次
+                    if (loli.isBerserk && i === laserCount - 1) {
+                        spawnLaser(scene);
+                    }
                 });
             }
         });
@@ -529,22 +567,27 @@ function spawnLaser(scene) {
 function spawnEnemyBall(scene) {
     if (!loli.active) return;
     
-    // 從敵人的位置出發
-    const x = loli.x;
-    const y = loli.y;
+    // 狂暴模式一次丟 5 顆，一般模式 1 顆
+    const ballCount = loli.isBerserk ? 5 : 1;
     
-    // 建立 ff00ff 的圓球 (半徑 15)
-    const ball = scene.add.circle(x, y, 15, 0xff00ff);
-    scene.physics.add.existing(ball);
-    enemyBalls.add(ball);
-    
-    // 隨機角度投擲 (0 到 360 度)
-    const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
-    const speed = 400;
-    
-    // 設定物理屬性
-    ball.body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-    ball.body.setBounce(1, 1); // 完全彈跳
-    ball.body.setCollideWorldBounds(true);
-    ball.body.onWorldBounds = true; // 觸發事件以利碰到牆壁銷毀
+    for (let i = 0; i < ballCount; i++) {
+        // 從敵人的位置出發
+        const x = loli.x;
+        const y = loli.y;
+        
+        // 建立 ff00ff 的圓球 (半徑 15)
+        const ball = scene.add.circle(x, y, 15, 0xff00ff);
+        scene.physics.add.existing(ball);
+        enemyBalls.add(ball);
+        
+        // 隨機角度投擲 (0 到 360 度)
+        const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const speed = 400;
+        
+        // 設定物理屬性
+        ball.body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+        ball.body.setBounce(1, 1); // 完全彈跳
+        ball.body.setCollideWorldBounds(true);
+        ball.body.onWorldBounds = true; // 觸發事件以利碰到牆壁銷毀
+    }
 }
