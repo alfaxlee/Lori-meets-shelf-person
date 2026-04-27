@@ -61,6 +61,14 @@ let shockwaves; // 衝擊波群組
 let lasers;    // 雷射攻擊群組
 let enemyBalls; // 敵人彈跳球群組
 
+// --- 衝刺系統變數 (新增) ---
+let dashEnergy = 100;
+let maxDashEnergy = 100;
+let dashCost = 50; // 增加衝刺消耗量 (從 30 改為 50)
+let energyRegen = 0.5;
+let isDashing = false;
+let energyBar;
+
 // --- 蘿莉遇櫃人 血量與狀態變數 ---
 let loliHP = 600;
 let loliMaxHP = 600;
@@ -69,7 +77,7 @@ let loliHPText;
 // --- 控制變數 ---
 let isActuallyMobile = false; // 真實手機偵測
 let forceControls = true;     // 是否強制顯示搖桿 (依要求設為 true)
-let mobileInput = { left: false, right: false, up: false, fireMg: false, fireSg: false, fireSn: false, reload: false };
+let mobileInput = { left: false, right: false, up: false, fireMg: false, fireSg: false, fireSn: false, reload: false, dash: false };
 let joystickBase;
 let joystickThumb;
 
@@ -145,6 +153,7 @@ function create() {
 
     // 當機畫面 (處理玩家死亡/受傷)
     const triggerCrash = () => {
+        if (isDashing) return; // 衝刺期間無敵 (新增)
         this.physics.pause();
         this.scene.pause();
         const crashScreen = document.createElement('div');
@@ -227,6 +236,9 @@ function create() {
     snText = this.add.text(width / 2, 20, `Sniper: ${snAmmo}/${snMaxAmmo}`, { fontSize: '20px', fill: '#00ffff', fontStyle: 'bold', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5, 0);
     loliHPText = this.add.text(width / 2, 60, `蘿莉血量: ${loliHP}`, { fontSize: '30px', fill: '#ff0000', fontStyle: 'bold', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5, 0);
 
+    // 能量條 UI (新增)
+    energyBar = this.add.graphics();
+
     this.physics.add.collider(loli, mgBullets, (obj1, obj2) => { handleLoliHit(this, obj1, obj2, 600, 200, 5); });
     this.physics.add.collider(loli, sgBullets, (obj1, obj2) => { handleLoliHit(this, obj1, obj2, 400, 150, 25); });
     this.physics.add.collider(loli, snBullets, (obj1, obj2) => { handleLoliHit(this, obj1, obj2, 1500, 500, 50); });
@@ -271,10 +283,9 @@ function create() {
         up: Phaser.Input.Keyboard.KeyCodes.W,
         left: Phaser.Input.Keyboard.KeyCodes.A,
         right: Phaser.Input.Keyboard.KeyCodes.D,
-        reload: Phaser.Input.Keyboard.KeyCodes.R
+        reload: Phaser.Input.Keyboard.KeyCodes.R,
+        dash: Phaser.Input.Keyboard.KeyCodes.Q // 將衝刺鍵改為 Q
     });
-
-    // 移除手動 resize 監聽器，讓 FIT 模式自動處理縮放，保持 1280x720 的物體比例一致
 }
 
 function setupMobileControls(scene) {
@@ -311,6 +322,7 @@ function setupMobileControls(scene) {
     createBtn(scene, rx - 200, ry - 170, 'SG', 0x00ff00, 'fireSg');
     createBtn(scene, rx - 240, ry, 'SN', 0x00ffff, 'fireSn');
     createBtn(scene, rx, ry, 'RE', 0xff00ff, 'reload');
+    createBtn(scene, rx - 440, ry, 'DASH', 0x00ffff, 'dash'); // 新增衝刺按鈕 (新增)
 }
 
 function createBtn(scene, x, y, label, color, key) {
@@ -349,10 +361,62 @@ function repositionMobileControls(scene) {
 }
 
 function update(time, delta) {
-    if (this.keys.left.isDown || mobileInput.left) player.setVelocityX(-400);
-    else if (this.keys.right.isDown || mobileInput.right) player.setVelocityX(400);
-    else player.setVelocityX(0);
-    if ((this.keys.up.isDown || mobileInput.up) && player.body.touching.down) player.setVelocityY(-550);
+    // 能量條 UI 更新 (新增)
+    energyBar.clear();
+    energyBar.fillStyle(0x888888, 0.8);
+    energyBar.fillRect(20, 100, 200, 20); // 灰色背景框
+    energyBar.fillStyle(0x00ffff, 1);
+    energyBar.fillRect(20, 100, 200 * (dashEnergy / maxDashEnergy), 20); // 青色前進條
+
+    // 能量回復 (新增)
+    if (dashEnergy < maxDashEnergy) {
+        dashEnergy = Math.min(maxDashEnergy, dashEnergy + energyRegen);
+    }
+
+    // 衝刺觸發偵測 (新增)
+    const dashPressed = Phaser.Input.Keyboard.JustDown(this.keys.dash) || mobileInput.dash;
+    if (dashPressed) {
+        if (dashEnergy >= dashCost && !isDashing) {
+            // 執行衝刺
+            dashEnergy -= dashCost;
+            isDashing = true;
+            player.setAlpha(0.5); // 變透明表示衝刺中
+
+            // 決定衝刺方向：改為朝向滑鼠位置 (新增)
+            const mousePointer = this.input.activePointer;
+            const angle = Phaser.Math.Angle.Between(player.x, player.y, mousePointer.x, mousePointer.y);
+            
+            player.setVelocity(Math.cos(angle) * 1600, Math.sin(angle) * 1600);
+            player.body.allowGravity = false; // 衝刺時無視重力
+
+            // 150 毫秒後結束衝刺
+            this.time.delayedCall(150, () => {
+                isDashing = false;
+                player.setAlpha(1);
+                player.body.allowGravity = true;
+            });
+        } else if (dashEnergy < dashCost && !isDashing) {
+            // 能量不足回饋：變紅並震動
+            this.tweens.add({
+                targets: energyBar,
+                x: '+=5',
+                duration: 50,
+                yoyo: true,
+                repeat: 3,
+                onStart: () => { energyBar.setTint(0xff0000); },
+                onComplete: () => { energyBar.x = 0; energyBar.clearTint(); }
+            });
+        }
+        mobileInput.dash = false;
+    }
+
+    if (!isDashing) {
+        if (this.keys.left.isDown || mobileInput.left) player.setVelocityX(-400);
+        else if (this.keys.right.isDown || mobileInput.right) player.setVelocityX(400);
+        else player.setVelocityX(0);
+
+        if ((this.keys.up.isDown || mobileInput.up) && player.body.touching.down) player.setVelocityY(-550);
+    }
 
     const pointer = this.input.activePointer;
     
