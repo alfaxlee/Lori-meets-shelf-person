@@ -68,6 +68,7 @@ let dashCost = 50; // 增加衝刺消耗量 (從 30 改為 50)
 let energyRegen = 0.5;
 let isDashing = false;
 let energyBar;
+let dashEnergyColor = 0x00ffff; // 衝刺能量條顏色 (新增)
 
 // --- 蘿莉遇櫃人 血量與狀態變數 ---
 let loliHP = 600;
@@ -119,7 +120,8 @@ function create() {
     player.setCollideWorldBounds(true);
     player.setBounce(0.1);
 
-    loli = this.physics.add.sprite(width / 4, height - 150, '蘿莉遇櫃人');
+    // 將蘿莉初始位置下移至 height - 110，使其出生就在地板上 (修改)
+    loli = this.physics.add.sprite(width / 4, height - 110, '蘿莉遇櫃人');
     loli.setScale(0.3); 
     loli.setCollideWorldBounds(true);
     loli.setBounce(0.1);
@@ -365,8 +367,8 @@ function update(time, delta) {
     energyBar.clear();
     energyBar.fillStyle(0x888888, 0.8);
     energyBar.fillRect(20, 100, 200, 20); // 灰色背景框
-    energyBar.fillStyle(0x00ffff, 1);
-    energyBar.fillRect(20, 100, 200 * (dashEnergy / maxDashEnergy), 20); // 青色前進條
+    energyBar.fillStyle(dashEnergyColor, 1); // 使用變數決定顏色 (修改)
+    energyBar.fillRect(20, 100, 200 * (dashEnergy / maxDashEnergy), 20); // 前進條
 
     // 能量回復 (新增)
     if (dashEnergy < maxDashEnergy) {
@@ -403,8 +405,8 @@ function update(time, delta) {
                 duration: 50,
                 yoyo: true,
                 repeat: 3,
-                onStart: () => { energyBar.setTint(0xff0000); },
-                onComplete: () => { energyBar.x = 0; energyBar.clearTint(); }
+                onStart: () => { dashEnergyColor = 0xff0000; }, // 改用顏色變數 (修正錯誤)
+                onComplete: () => { energyBar.x = 0; dashEnergyColor = 0x00ffff; } // 恢復顏色 (修正錯誤)
             });
         }
         mobileInput.dash = false;
@@ -604,7 +606,7 @@ function fireSN(scene, pointer, autoAim) {
 }
 
 /**
- * 隨機天降雷射攻擊
+ * 隨機天降雷射攻擊 (包含狂暴模式橫向雷射)
  * @param {Phaser.Scene} scene - Phaser 場景實例
  */
 function spawnLaser(scene) {
@@ -613,6 +615,7 @@ function spawnLaser(scene) {
     // 狂暴模式固定 1 個雷射，一般模式隨機 1 到 3 個
     const laserCount = loli.isBerserk ? 1 : Phaser.Math.Between(1, 3); 
     const height = scene.cameras.main.height;
+    const width = scene.cameras.main.width;
     
     // 狂暴模式下預警時間減半 (0.5s)，一般模式 1s
     const warningDuration = loli.isBerserk ? 50 : 100; // 配合 yoyo 和 repeat
@@ -620,39 +623,77 @@ function spawnLaser(scene) {
     for (let i = 0; i < laserCount; i++) {
         const randomX = Phaser.Math.Between(50, 1230); // 隨機 X 位置
 
-        // 預警階段：閃爍的紅線
-        const warningLine = scene.add.rectangle(randomX, height / 2, 2, height, 0xff0000, 0.5);
+        // 預警階段：閃爍的紅線 (縱向)
+        const warningLineV = scene.add.rectangle(randomX, height / 2, 2, height, 0xff0000, 0.5);
         
-        // 快速閃爍效果
+        // 狂暴模式：新增橫向雷射預警 (新增)
+        let warningLineH;
+        let randomY;
+        if (loli.isBerserk) {
+            // 計算最低安全高度 (最低限度)：地板位置 - 地板高度/2 - 玩家高度 - 緩衝位移
+            const minSafeY = (height - 50) - 20 - player.displayHeight - 35; 
+            // 在畫面頂部 (例如 50px) 到最低安全高度之間隨機選取一個位置
+            randomY = Phaser.Math.Between(50, minSafeY);
+            
+            warningLineH = scene.add.rectangle(width / 2, randomY, width, 2, 0xff0000, 0.5);
+        }
+
+        // 快速閃爍效果 (縱向)
         scene.tweens.add({
-            targets: warningLine,
+            targets: warningLineV,
             alpha: 0,
             duration: warningDuration,
             yoyo: true,
             repeat: 5, 
             onComplete: () => {
-                warningLine.destroy(); // 移除預警線
+                warningLineV.destroy(); // 移除預警線
 
                 // 攻擊階段：降下雷射 (寬 25px，使用要求的顏色 #ff00ff)
-                const laser = scene.add.rectangle(randomX, height / 2, 25, height, 0xff00ff);
-                scene.physics.add.existing(laser);
-                lasers.add(laser);
+                const laserV = scene.add.rectangle(randomX, height / 2, 25, height, 0xff00ff);
+                scene.physics.add.existing(laserV);
+                lasers.add(laserV);
 
-                laser.body.allowGravity = false;
-                laser.body.setImmovable(true);
+                laserV.body.allowGravity = false;
+                laserV.body.setImmovable(true);
 
                 // 雷射攻擊持續 0.5 秒後消失
                 scene.time.delayedCall(500, () => {
-                    laser.destroy();
+                    laserV.destroy();
                     
                     // 狂暴模式：射完立刻提醒下一個雷射 (連鎖觸發)
-                    // 為了避免瞬間產生過多物件，只讓循環中的最後一個觸發下一次
                     if (loli.isBerserk && i === laserCount - 1) {
                         spawnLaser(scene);
                     }
                 });
             }
         });
+
+        // 快速閃爍效果 (橫向 - 僅狂暴模式)
+        if (loli.isBerserk && warningLineH) {
+            scene.tweens.add({
+                targets: warningLineH,
+                alpha: 0,
+                duration: warningDuration,
+                yoyo: true,
+                repeat: 5, 
+                onComplete: () => {
+                    warningLineH.destroy(); // 移除預警線
+
+                    // 攻擊階段：橫向雷射 (使用與預警線相同的隨機隨機高度)
+                    const laserH = scene.add.rectangle(width / 2, randomY, width, 25, 0xff00ff);
+                    scene.physics.add.existing(laserH);
+                    lasers.add(laserH);
+
+                    laserH.body.allowGravity = false;
+                    laserH.body.setImmovable(true);
+
+                    // 雷射攻擊持續 0.5 秒後消失
+                    scene.time.delayedCall(500, () => {
+                        laserH.destroy();
+                    });
+                }
+            });
+        }
     }
 }
 
