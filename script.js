@@ -406,18 +406,23 @@ function update(time, delta) {
             isDashing = true;
             player.setAlpha(0.5); // 變透明表示衝刺中
 
-            // 決定衝刺方向 (修改)
+            // 決定衝刺方向與動能 (修正：電腦版根據距離決定動能)
             let angle;
-            if (isActuallyMobile) {
-                // 手機模式：固定往敵人的反方向衝刺 (新增)
+            let speed = 1600; // 預設速度
+            if (mobileInput.dash) {
+                // 手機按鈕觸發：固定往敵人的反方向衝刺
                 angle = Phaser.Math.Angle.Between(loli.x, loli.y, player.x, player.y);
             } else {
-                // 電腦模式：朝向滑鼠位置
+                // 鍵盤 Q 鍵觸發：朝向滑鼠位置，並根據距離決定動能 (新增)
                 const mousePointer = this.input.activePointer;
                 angle = Phaser.Math.Angle.Between(player.x, player.y, mousePointer.x, mousePointer.y);
+                
+                // 計算距離並將其映射至速度 (範圍 800 ~ 2400)
+                const dist = Phaser.Math.Distance.Between(player.x, player.y, mousePointer.x, mousePointer.y);
+                speed = Phaser.Math.Clamp(dist * 4, 800, 2400); // 距離越遠衝越快
             }
             
-            player.setVelocity(Math.cos(angle) * 1600, Math.sin(angle) * 1600);
+            player.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
             player.body.allowGravity = false; // 衝刺時無視重力
 
             // 產生反方向的塵埃效果 (新增)
