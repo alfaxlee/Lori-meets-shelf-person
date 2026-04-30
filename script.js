@@ -479,14 +479,67 @@ function update(time, delta) {
 
             // 建立左右兩側的紫色雷射槍 (修改：細管長度加倍至 80，總長維持 400)
             this.berserkGunLeft = this.add.container(0, height / 2);
-            const bodyLeft = this.add.rectangle(60, 0, 320, 80, 0xff00ff); // 寬度調整至 320
-            const barrelLeft = this.add.rectangle(260, 0, 80, 30, 0xff00ff); // 細管長度加倍至 80，細的部分朝內
+            const bodyLeft = this.add.rectangle(60, 0, 320, 80, 0xff00ff);
+            const barrelLeft = this.add.rectangle(260, 0, 80, 30, 0xff00ff);
             this.berserkGunLeft.add([bodyLeft, barrelLeft]);
 
             this.berserkGunRight = this.add.container(width, height / 2);
-            const bodyRight = this.add.rectangle(-60, 0, 320, 80, 0xff00ff); // 寬度調整至 320
-            const barrelRight = this.add.rectangle(-260, 0, 80, 30, 0xff00ff); // 細管長度加倍至 80，細的部分朝內
+            const bodyRight = this.add.rectangle(-60, 0, 320, 80, 0xff00ff);
+            const barrelRight = this.add.rectangle(-260, 0, 80, 30, 0xff00ff);
             this.berserkGunRight.add([bodyRight, barrelRight]);
+
+            // 設定狂暴雷射槍攻擊循環 (修改：每秒射擊一次，隨機轉向)
+            const scheduleBerserkGunAttack = () => {
+                if (!loli.active || !loli.isBerserk) return;
+
+                // 1. 隨機決定目標角度 (最大 45 度)
+                const targetAngleL = Phaser.Math.Between(-45, 45);
+                const targetAngleR = Phaser.Math.Between(-45, 45);
+
+                // 2. 快速轉向目標角度 (0.3 秒)
+                this.tweens.add({
+                    targets: this.berserkGunLeft,
+                    angle: targetAngleL,
+                    duration: 300,
+                    ease: 'Cubic.easeOut'
+                });
+                this.tweens.add({
+                    targets: this.berserkGunRight,
+                    angle: targetAngleR,
+                    duration: 300,
+                    ease: 'Cubic.easeOut',
+                    onComplete: () => {
+                        if (!loli.active || !loli.isBerserk) return;
+
+                        // 3. 射出雷射光 (寬度 1500 確保貫穿螢幕)
+                        const laserL = this.add.rectangle(260, 0, 1500, 20, 0xff00ff, 0.8).setOrigin(0, 0.5);
+                        const laserR = this.add.rectangle(-260, 0, 1500, 20, 0xff00ff, 0.8).setOrigin(1, 0.5);
+                        
+                        this.berserkGunLeft.add(laserL);
+                        this.berserkGunRight.add(laserR);
+
+                        this.physics.add.existing(laserL);
+                        this.physics.add.existing(laserR);
+                        laserL.body.allowGravity = false;
+                        laserR.body.allowGravity = false;
+                        
+                        lasers.add(laserL);
+                        lasers.add(laserR);
+
+                        // 4. 殘留 0.5 秒後消失
+                        this.time.delayedCall(500, () => {
+                            laserL.destroy();
+                            laserR.destroy();
+                            
+                            // 5. 每秒循環一次 (扣除轉向 0.3s 與殘留 0.5s，剩餘 0.2s 延遲)
+                            if (loli.isBerserk) {
+                                this.time.delayedCall(200, scheduleBerserkGunAttack);
+                            }
+                        });
+                    }
+                });
+            };
+            scheduleBerserkGunAttack();
 
             // 立即啟動狂暴模式的連鎖雷射
             spawnLaser(this);
