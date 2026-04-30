@@ -406,9 +406,16 @@ function update(time, delta) {
             isDashing = true;
             player.setAlpha(0.5); // 變透明表示衝刺中
 
-            // 決定衝刺方向：改為朝向滑鼠位置 (新增)
-            const mousePointer = this.input.activePointer;
-            const angle = Phaser.Math.Angle.Between(player.x, player.y, mousePointer.x, mousePointer.y);
+            // 決定衝刺方向 (修改)
+            let angle;
+            if (isActuallyMobile) {
+                // 手機模式：固定往敵人的反方向衝刺 (新增)
+                angle = Phaser.Math.Angle.Between(loli.x, loli.y, player.x, player.y);
+            } else {
+                // 電腦模式：朝向滑鼠位置
+                const mousePointer = this.input.activePointer;
+                angle = Phaser.Math.Angle.Between(player.x, player.y, mousePointer.x, mousePointer.y);
+            }
             
             player.setVelocity(Math.cos(angle) * 1600, Math.sin(angle) * 1600);
             player.body.allowGravity = false; // 衝刺時無視重力
