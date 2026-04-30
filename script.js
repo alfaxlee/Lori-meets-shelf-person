@@ -488,52 +488,55 @@ function update(time, delta) {
             const barrelRight = this.add.rectangle(-260, 0, 80, 30, 0xff00ff);
             this.berserkGunRight.add([bodyRight, barrelRight]);
 
-            // 設定狂暴雷射槍攻擊循環 (修改：每秒射擊一次，隨機轉向)
+            // 設定狂暴雷射槍攻擊循環 (修改：頻率改成每兩秒一次，輪流射擊：右 -> 左 -> 右)
+            let nextIsLeft = false; // 追蹤下一次該哪邊射擊 (false 為右, true 為左)
             const scheduleBerserkGunAttack = () => {
                 if (!loli.active || !loli.isBerserk) return;
 
+                // 決定哪一邊的雷射槍射擊，並切換下一次的目標
+                const isLeft = nextIsLeft;
+                const targetGun = isLeft ? this.berserkGunLeft : this.berserkGunRight;
+                nextIsLeft = !nextIsLeft; // 切換下一次的開火方
+
                 // 1. 隨機決定目標角度 (最大 45 度)
-                const targetAngleL = Phaser.Math.Between(-45, 45);
-                const targetAngleR = Phaser.Math.Between(-45, 45);
+                const targetAngle = Phaser.Math.Between(-45, 45);
 
                 // 2. 快速轉向目標角度 (0.3 秒)
                 this.tweens.add({
-                    targets: this.berserkGunLeft,
-                    angle: targetAngleL,
-                    duration: 300,
-                    ease: 'Cubic.easeOut'
-                });
-                this.tweens.add({
-                    targets: this.berserkGunRight,
-                    angle: targetAngleR,
+                    targets: targetGun,
+                    angle: targetAngle,
                     duration: 300,
                     ease: 'Cubic.easeOut',
                     onComplete: () => {
                         if (!loli.active || !loli.isBerserk) return;
 
-                        // 3. 射出雷射光 (寬度 1500 確保貫穿螢幕)
-                        const laserL = this.add.rectangle(260, 0, 1500, 20, 0xff00ff, 0.8).setOrigin(0, 0.5);
-                        const laserR = this.add.rectangle(-260, 0, 1500, 20, 0xff00ff, 0.8).setOrigin(1, 0.5);
+                        // 3. 射出雷射光 (使用世界座標，避免 Container 內的物理衝突導致光束掉落)
+                        const rad = Phaser.Math.DegToRad(targetGun.angle);
+                        const offsetX = isLeft ? 260 : -260; // 槍管在 Container 內的偏移量
+                        const worldX = targetGun.x + Math.cos(rad) * offsetX;
+                        const worldY = targetGun.y + Math.sin(rad) * offsetX;
                         
-                        this.berserkGunLeft.add(laserL);
-                        this.berserkGunRight.add(laserR);
+                        const laserOrigin = isLeft ? 0 : 1;
+                        const laser = this.add.rectangle(worldX, worldY, 1500, 20, 0xff00ff, 0.8).setOrigin(laserOrigin, 0.5);
+                        laser.setAngle(targetGun.angle); // 設定與槍枝相同的角度
+                        
+                        this.physics.add.existing(laser);
+                        lasers.add(laser);
 
-                        this.physics.add.existing(laserL);
-                        this.physics.add.existing(laserR);
-                        laserL.body.allowGravity = false;
-                        laserR.body.allowGravity = false;
-                        
-                        lasers.add(laserL);
-                        lasers.add(laserR);
+                        // 必須在加入群組後設定物理屬性，確保不被群組預設值覆蓋
+                        if (laser.body) {
+                            laser.body.allowGravity = false; // 禁用重力，防止光束往下掉
+                            laser.body.immovable = true;     // 確保光束固定
+                            laser.body.setVelocity(0, 0);    // 強制速度為零
+                        }
 
                         // 4. 殘留 0.5 秒後消失
                         this.time.delayedCall(500, () => {
-                            laserL.destroy();
-                            laserR.destroy();
+                            laser.destroy();
                             
-                            // 5. 每秒循環一次 (扣除轉向 0.3s 與殘留 0.5s，剩餘 0.2s 延遲)
+                            // 5. 每兩秒循環一次 (轉向 0.3s + 殘留 0.5s + 延遲 1.2s = 2.0s)
                             if (loli.isBerserk) {
-                                this.time.delayedCall(200, scheduleBerserkGunAttack);
+                                this.time.delayedCall(1200, scheduleBerserkGunAttack);
                             }
                         });
                     }
