@@ -146,11 +146,19 @@ function create() {
         // ball 會因為 collider 自然反彈
     });
 
-    this.physics.world.on('worldbounds', (body) => {
+    this.physics.world.on('worldbounds', (body, up, down, left, right) => {
         const obj = body.gameObject;
-        // 移除 enemyBalls，讓球可以撞牆反彈 (修改)
-        if (obj && (mgBullets.contains(obj) || sgBullets.contains(obj) || snBullets.contains(obj) || shockwaves.contains(obj))) {
-            obj.destroy(); // 子彈或衝擊波碰到牆壁 (世界邊界) 就消失
+        if (!obj) return;
+
+        // 子彈或衝擊波碰到牆壁 (世界邊界) 就消失
+        if (mgBullets.contains(obj) || sgBullets.contains(obj) || snBullets.contains(obj) || shockwaves.contains(obj)) {
+            obj.destroy(); 
+        } 
+        // 敵人彈跳球碰到天花板或牆壁就消失
+        else if (enemyBalls.contains(obj)) {
+            if (up || left || right) {
+                obj.destroy(); // 碰到天花板或左右牆壁時銷毀
+            }
         }
     });
 
@@ -197,6 +205,7 @@ function create() {
         };
         requestAnimationFrame(updatePercent);
     };
+    this.triggerCrash = triggerCrash; // 將當機函式掛載到場景，供外部雷射函式使用 (新增)
 
     this.physics.add.collider(player, loli, () => {
         if (!loli.isBerserk) triggerCrash(); // 狂暴模式下碰到玩家沒事
@@ -218,11 +227,16 @@ function create() {
     };
     scheduleNextLaser();
 
-    // 設定敵人彈跳球計時器 (狂暴模式頻率上升)
+    // 設定敵人彈跳球計時器 (一般模式頻率降低)
     const scheduleNextBall = () => {
-        const delay = loli.isBerserk ? 2000 : Phaser.Math.Between(10000, 15000);
+        const delay = loli.isBerserk ? 2000 : Phaser.Math.Between(15000, 25000); // 一般模式從 10-15s 增加到 15-25s (修改)
         this.time.delayedCall(delay, () => {
-            spawnEnemyBall(this);
+            // 暫時取消狂暴模式的丟球攻擊，僅在一般模式執行 (修改)
+            if (!loli.isBerserk) {
+                spawnEnemyBall(this);
+            } else {
+                // spawnEnemyBall(this); // 狂暴模式丟球暫時註解，之後會加回去
+            }
             scheduleNextBall();
         });
     };
@@ -451,6 +465,16 @@ function update(time, delta) {
     }
 
     if (loli.active) {
+        // --- 雷射即時碰撞判定 (優化) ---
+        // Arcade 物理的 overlap 在靜止物體生成時可能漏判，這裡手動檢查矩形重疊 (新增)
+        lasers.getChildren().forEach(laser => {
+            const playerBounds = player.getBounds();
+            const laserBounds = laser.getBounds();
+            if (Phaser.Geom.Intersects.RectangleToRectangle(playerBounds, laserBounds)) {
+                this.triggerCrash();
+            }
+        });
+
         // --- 狂暴模式狀態偵測 ---
         if (loliHP < 150 && !loli.isBerserk) {
             loli.isBerserk = true;
@@ -476,6 +500,12 @@ function update(time, delta) {
             // 設置玩家與羅莉與新地板/天花板的碰撞
             this.physics.add.collider(player, [this.berserkCeiling, this.berserkFloor]);
             this.physics.add.collider(loli, [this.berserkCeiling, this.berserkFloor]);
+
+            // 設置敵人彈跳球碰到天花板消失 (新增)
+            this.physics.add.collider(enemyBalls, this.berserkCeiling, (ball) => {
+                ball.destroy(); // 碰到狂暴模式天花板時銷毀
+            });
+            this.physics.add.collider(enemyBalls, this.berserkFloor); // 碰到地板維持反彈
 
             // 建立左右兩側的紫色雷射槍 (修改：細管長度加倍至 80，總長維持 400)
             this.berserkGunLeft = this.add.container(0, height / 2);
@@ -516,28 +546,43 @@ function update(time, delta) {
                         const worldX = targetGun.x + Math.cos(rad) * offsetX;
                         const worldY = targetGun.y + Math.sin(rad) * offsetX;
                         
+                        // 1. 預警階段：在發射路徑上先出現一條細紅線 (新增)
                         const laserOrigin = isLeft ? 0 : 1;
-                        const laser = this.add.rectangle(worldX, worldY, 1500, 20, 0xff00ff, 0.8).setOrigin(laserOrigin, 0.5);
-                        laser.setAngle(targetGun.angle); // 設定與槍枝相同的角度
-                        
-                        this.physics.add.existing(laser);
-                        lasers.add(laser);
+                        const warningLine = this.add.rectangle(worldX, worldY, 1500, 2, 0xff0000, 0.5).setOrigin(laserOrigin, 0.5);
+                        warningLine.setAngle(targetGun.angle);
 
-                        // 必須在加入群組後設定物理屬性，確保不被群組預設值覆蓋
-                        if (laser.body) {
-                            laser.body.allowGravity = false; // 禁用重力，防止光束往下掉
-                            laser.body.immovable = true;     // 確保光束固定
-                            laser.body.setVelocity(0, 0);    // 強制速度為零
-                        }
-
-                        // 4. 殘留 0.5 秒後消失
+                        // 0.5 秒預警後發射正式雷射 (新增)
                         this.time.delayedCall(500, () => {
-                            laser.destroy();
+                            warningLine.destroy(); // 移除預警線
+
+                            if (!loli.active || !loli.isBerserk) return;
+
+                            // 2. 攻擊階段：射出正式雷射光
+                            const laser = this.add.rectangle(worldX, worldY, 1500, 20, 0xff00ff, 0.8).setOrigin(laserOrigin, 0.5);
+                            laser.setAngle(targetGun.angle); // 設定與槍枝相同的角度
                             
-                            // 5. 每兩秒循環一次 (轉向 0.3s + 殘留 0.5s + 延遲 1.2s = 2.0s)
-                            if (loli.isBerserk) {
-                                this.time.delayedCall(1200, scheduleBerserkGunAttack);
+                            this.physics.add.existing(laser);
+                            lasers.add(laser);
+
+                            // 確保玩家碰到雷射會觸發當機
+                            this.physics.add.overlap(player, laser, this.triggerCrash);
+
+                            // 必須在加入群組後設定物理屬性，確保不被群組預設值覆蓋
+                            if (laser.body) {
+                                laser.body.allowGravity = false; // 禁用重力，防止光束往下掉
+                                laser.body.immovable = true;     // 確保光束固定
+                                laser.body.setVelocity(0, 0);    // 強制速度為零
                             }
+
+                            // 3. 殘留 0.5 秒後消失
+                            this.time.delayedCall(500, () => {
+                                laser.destroy();
+                                
+                                // 4. 每兩秒循環一次 (轉向 0.3s + 預警 0.5s + 殘留 0.5s + 延遲 0.7s = 2.0s) (修改延遲)
+                                if (loli.isBerserk) {
+                                    this.time.delayedCall(700, scheduleBerserkGunAttack);
+                                }
+                            });
                         });
                     }
                 });
@@ -715,6 +760,9 @@ function spawnLaser(scene) {
                 const laserV = scene.add.rectangle(randomX, height / 2, 25, height, 0xff00ff);
                 scene.physics.add.existing(laserV);
                 lasers.add(laserV);
+
+                // 確保玩家碰到天降雷射也會當機 (新增)
+                scene.physics.add.overlap(player, laserV, scene.triggerCrash);
 
                 laserV.body.allowGravity = false;
                 laserV.body.setImmovable(true);
