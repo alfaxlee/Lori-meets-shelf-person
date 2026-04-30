@@ -413,6 +413,9 @@ function update(time, delta) {
             player.setVelocity(Math.cos(angle) * 1600, Math.sin(angle) * 1600);
             player.body.allowGravity = false; // 衝刺時無視重力
 
+            // 產生反方向的塵埃效果 (新增)
+            createDashDust(this, player.x, player.y, angle);
+
             // 150 毫秒後結束衝刺
             this.time.delayedCall(150, () => {
                 isDashing = false;
@@ -810,5 +813,49 @@ function spawnEnemyBall(scene) {
         ball.body.setBounce(1, 1); // 完全彈跳
         ball.body.setCollideWorldBounds(true);
         ball.body.onWorldBounds = true; // 觸發事件以利碰到牆壁銷毀
+    }
+}
+
+/**
+ * 建立衝刺塵埃效果
+ * @param {Phaser.Scene} scene - Phaser 場景實例
+ * @param {number} x - 塵埃產生的 X 座標
+ * @param {number} y - 塵埃產生的 Y 座標
+ * @param {number} dashAngle - 衝刺的角度 (弧度)
+ */
+function createDashDust(scene, x, y, dashAngle) {
+    const dustCount = 32; // 增加塵埃數量 (從 12 增加到 32)
+    const oppositeAngle = dashAngle + Math.PI; // 塵埃噴向衝刺的反方向
+
+    for (let i = 0; i < dustCount; i++) {
+        // 隨機擴散角度、初速與粒子尺寸
+        const spread = Phaser.Math.FloatBetween(-0.6, 0.6); // 增加擴散範圍
+        const speed = Phaser.Math.Between(100, 600);       // 增加速度範圍
+        const size = Phaser.Math.Between(6, 12);           // 增加尺寸 (從 4-8 增加到 6-12)
+        
+        // 建立灰黑色塵埃粒子 (使用矩形模擬) (修改顏色)
+        const dust = scene.add.rectangle(x, y, size, size, 0x333333, 0.8);
+        scene.physics.add.existing(dust);
+        
+        dust.body.allowGravity = false; // 塵埃不受重力影響
+        dust.body.setVelocity(
+            Math.cos(oppositeAngle + spread) * speed,
+            Math.sin(oppositeAngle + spread) * speed
+        );
+
+        // 隨機初始旋轉角度
+        dust.setRotation(Phaser.Math.FloatBetween(0, Math.PI * 2));
+
+        // 漸變消失動畫
+        scene.tweens.add({
+            targets: dust,
+            alpha: 0,
+            scale: 0.2,
+            duration: Phaser.Math.Between(400, 800),
+            ease: 'Cubic.easeOut',
+            onComplete: () => {
+                dust.destroy(); // 動畫結束後銷毀粒子
+            }
+        });
     }
 }
