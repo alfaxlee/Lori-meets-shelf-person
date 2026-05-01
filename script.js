@@ -164,8 +164,11 @@ function create() {
     });
 
     // 當機畫面 (處理玩家死亡/受傷)
+    let isCrashed = false; // 新增：防止多次觸發當機
     const triggerCrash = () => {
-        if (isInvincible) return; // 衝刺/護盾期間無敵 (修改)
+        if (isInvincible || isCrashed) return; // 衝刺/護盾期間無敵，或已當機則跳過 (修改)
+        isCrashed = true;
+
         this.physics.pause();
         this.scene.pause();
         const crashScreen = document.createElement('div');
@@ -174,7 +177,7 @@ function create() {
             <div class="bsod-content">
                 <div class="bsod-smiley">:(</div>
                 <h1 class="bsod-message">不明錯誤，我們將盡力幫您修復，若無法修復請上: <a href="https://alfaxlee.github.io/problemsolving/">https://alfaxlee.github.io/problemsolving/</a></h1>
-                <div id="progress-row" class="bsod-progress">修復中<span id="progress-percent">0</span>% 完成</div>
+                <div class="bsod-progress">修復中<span class="progress-percent">0</span>% 完成</div>
                 <div class="bsod-footer">
                     <img src="./assets/images/qr%20code.png" class="bsod-qr">
                     <div class="bsod-details">
@@ -185,11 +188,16 @@ function create() {
             </div>
         `;
         document.body.appendChild(crashScreen);
+        
+        // 使用局部選擇器，避免多個當機畫面時的 ID 衝突 (修改)
+        const progressPercent = crashScreen.querySelector('.progress-percent');
+        const progressRow = crashScreen.querySelector('.bsod-progress');
+        
         let percent = 0;
         const startTime = Date.now();
         const updatePercent = () => {
             percent = Math.min(Math.floor(((Date.now() - startTime) / 5000) * 100), 100);
-            const progressPercent = document.getElementById('progress-percent');
+            
             if (progressPercent) progressPercent.innerText = percent;
 
             if (percent < 100) {
@@ -197,7 +205,6 @@ function create() {
             } else {
                 // 當修復到 100% 時，背景切換為彩色電視，並將文字改為「錯誤」
                 crashScreen.classList.add('tv-background'); 
-                const progressRow = document.getElementById('progress-row');
                 if (progressRow) {
                     progressRow.innerText = '錯誤';
                     progressRow.style.color = 'black'; // 背景變彩色後，黑色文字可能更清楚
@@ -378,20 +385,20 @@ function update(time, delta) {
             isInvincible = true; // 開啟無敵 (新增)
             player.setAlpha(0.5); // 變透明表示衝刺中
 
-            // 決定衝刺方向與動能 (修正：電腦版根據距離決定動能)
+            // 決定衝刺方向與動能 (修正：速度提升 1.5 倍)
             let angle;
-            let speed = 1600; // 預設速度
+            let speed = 2400; // 預設速度 (從 1600 提升至 2400)
             if (mobileInput.dash) {
                 // 手機按鈕觸發：固定往敵人的反方向衝刺
                 angle = Phaser.Math.Angle.Between(loli.x, loli.y, player.x, player.y);
             } else {
-                // 鍵盤 Q 鍵觸發：朝向滑鼠位置，並根據距離決定動能 (新增)
+                // 鍵盤 Q 鍵觸發：朝向滑鼠位置，並根據距離決定動能
                 const mousePointer = this.input.activePointer;
                 angle = Phaser.Math.Angle.Between(player.x, player.y, mousePointer.x, mousePointer.y);
                 
-                // 計算距離並將其映射至速度 (範圍 800 ~ 2400)
+                // 計算距離並將其映射至速度 (範圍提升 1.5 倍：1200 ~ 3600)
                 const dist = Phaser.Math.Distance.Between(player.x, player.y, mousePointer.x, mousePointer.y);
-                speed = Phaser.Math.Clamp(dist * 4, 800, 2400); // 距離越遠衝越快
+                speed = Phaser.Math.Clamp(dist * 6, 1200, 3600); // 乘數從 4 改為 6
             }
             
             player.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
