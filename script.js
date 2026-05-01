@@ -64,9 +64,10 @@ let enemyBalls; // 敵人彈跳球群組
 // --- 衝刺系統變數 (新增) ---
 let dashEnergy = 100;
 let maxDashEnergy = 100;
-let dashCost = 50; // 增加衝刺消耗量 (從 30 改為 50)
+let dashCost = 33; // 減少衝刺消耗，在不回復的情況下可衝刺三次 (修改)
 let energyRegen = 0.5;
 let isDashing = false;
+let isInvincible = false; // 新增：衝刺無敵狀態
 let energyBar;
 let dashEnergyColor = 0x00ffff; // 衝刺能量條顏色 (新增)
 
@@ -164,7 +165,7 @@ function create() {
 
     // 當機畫面 (處理玩家死亡/受傷)
     const triggerCrash = () => {
-        if (isDashing) return; // 衝刺期間無敵 (新增)
+        if (isInvincible) return; // 衝刺/護盾期間無敵 (修改)
         this.physics.pause();
         this.scene.pause();
         const crashScreen = document.createElement('div');
@@ -404,6 +405,7 @@ function update(time, delta) {
             // 執行衝刺
             dashEnergy -= dashCost;
             isDashing = true;
+            isInvincible = true; // 開啟無敵 (新增)
             player.setAlpha(0.5); // 變透明表示衝刺中
 
             // 決定衝刺方向與動能 (修正：電腦版根據距離決定動能)
@@ -427,12 +429,24 @@ function update(time, delta) {
 
             // 產生反方向的塵埃效果 (新增)
             createDashDust(this, player.x, player.y, angle);
+            
+            // 產生衝刺防護網效果 (新增)
+            createDashShield(this, player, angle);
 
-            // 150 毫秒後結束衝刺
+            // 清除舊的無敵結束計時器 (如果有的話) (新增)
+            if (this.invincibilityTimer) this.invincibilityTimer.remove();
+
+            // 150 毫秒後結束物理衝刺狀態，但保持無敵 (修改)
             this.time.delayedCall(150, () => {
-                isDashing = false;
-                player.setAlpha(1);
+                isDashing = false; // 恢復控制
                 player.body.allowGravity = true;
+                player.setAlpha(0.7); // 稍微變淡表示仍有無敵效果
+                
+                // 1000 毫秒後真正結束無敵狀態 (新增)
+                this.invincibilityTimer = this.time.delayedCall(1000, () => {
+                    isInvincible = false;
+                    player.setAlpha(1);
+                });
             });
         } else if (dashEnergy < dashCost && !isDashing) {
             // 能量不足回饋：變紅並震動
@@ -870,4 +884,106 @@ function createDashDust(scene, x, y, dashAngle) {
             }
         });
     }
+}
+
+/**
+ * 建立衝刺防護網效果 (新增)
+ * @param {Phaser.Scene} scene - Phaser 場景實例
+ * @param {Phaser.GameObjects.Sprite} player - 玩家實例
+ * @param {number} angle - 衝刺的角度 (弧度)
+ */
+function createDashShield(scene, player, angle) {
+    const shield = scene.add.graphics();
+    let hasHit = false; // 確保每次衝刺只會對蘿莉造成一次傷害
+    let alive = true; // 新增：控制護盾生命週期
+    
+    // 150ms 衝刺 + 1000ms 殘留 = 1150ms (新增)
+    scene.time.delayedCall(1150, () => {
+        alive = false;
+    });
+
+    // 使用 update 事件讓護盾跟隨玩家
+    const onUpdate = () => {
+        if (!alive || !player.active) { // 修改：改用 alive 判斷
+            shield.destroy();
+            scene.events.off('update', onUpdate);
+            return;
+        }
+
+        shield.clear();
+        shield.lineStyle(2, 0x00ffff, 0.6); // 使用 #00ffff 防護網顏色
+
+        // 調整護盾位置：向衝刺方向偏移，使其不碰到玩家 (新增偏移)
+        const offset = 35;
+        const centerX = player.x + Math.cos(angle) * offset;
+        const centerY = player.y + Math.sin(angle) * offset;
+
+        const radius = 65; // 稍微加大護盾半徑
+        const arcRange = Math.PI / 1.2; // 約 150 度
+        const startAngle = angle - arcRange / 2;
+        const endAngle = angle + arcRange / 2;
+
+        // 畫出網格感
+        // 1. 多重圓弧線
+        for (let r = 25; r <= radius; r += 20) {
+            shield.beginPath();
+            shield.arc(centerX, centerY, r, startAngle, endAngle);
+            shield.strokePath();
+        }
+
+        // 2. 放射狀網格線
+        const segments = 6;
+        for (let i = 0; i <= segments; i++) {
+            const currentAngle = startAngle + (arcRange / segments) * i;
+            const x1 = centerX + Math.cos(currentAngle) * 15;
+            const y1 = centerY + Math.sin(currentAngle) * 15;
+            const x2 = centerX + Math.cos(currentAngle) * radius;
+            const y2 = centerY + Math.sin(currentAngle) * radius;
+            shield.lineBetween(x1, y1, x2, y2);
+        }
+        
+        // 增加發光感
+        shield.lineStyle(1, 0x00ffff, 1);
+        shield.beginPath();
+        shield.arc(centerX, centerY, radius, startAngle, endAngle);
+        shield.strokePath();
+
+        // --- 碰撞偵測 (新增) ---
+        if (!hasHit && loli.active) {
+            const dist = Phaser.Math.Distance.Between(centerX, centerY, loli.x, loli.y);
+            // 當蘿莉靠近護盾中心點且在護盾範圍內時觸發
+            if (dist < radius + 40) {
+                // 模擬狙擊槍的擊退與傷害 (傷害 25)
+                const hitAngle = Phaser.Math.Angle.Between(player.x, player.y, loli.x, loli.y);
+                const force = 1500; // 狙擊槍強度的擊退
+                const stunTime = 500;
+                const damage = 25;
+
+                loliHP -= damage;
+                loliHPText.setText(`蘿莉血量: ${loliHP}`);
+                
+                loli.isHit = true;
+                loli.hitStunTimer = stunTime;
+                loli.setVelocity(Math.cos(hitAngle) * force, Math.sin(hitAngle) * force - 200);
+                loli.setTint(0xff0000);
+                scene.cameras.main.shake(100, 0.005);
+                
+                // 如果血量歸零，複用原本的死亡邏輯 (檢查 handleLoliHit 的內容)
+                if (loliHP <= 0) {
+                    // 這裡觸發死亡流程 (簡化處理，因為 update 會處理 HP <= 0 的視覺消失)
+                    loli.setActive(false).setVisible(false).body.enable = false;
+                    scene.cameras.main.flash(500, 255, 0, 0);
+                    
+                    // 清除所有攻擊
+                    if (shockwaves) shockwaves.clear(true, true);
+                    if (lasers) lasers.clear(true, true);
+                    if (enemyBalls) enemyBalls.clear(true, true);
+                }
+
+                hasHit = true; // 標記已命中
+            }
+        }
+    };
+
+    scene.events.on('update', onUpdate);
 }
