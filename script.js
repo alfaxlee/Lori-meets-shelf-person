@@ -216,17 +216,7 @@ function create() {
     this.physics.add.overlap(player, enemyBalls, triggerCrash); // 玩家碰到彈跳球也會當機
 
     // 設定隨機雷射計時器 (3-7 秒觸發一次)
-    const scheduleNextLaser = () => {
-        // 如果進入狂暴模式，雷射邏輯會轉由 spawnLaser 內部連鎖觸發
-        if (loli.isBerserk) return; 
-
-        const delay = Phaser.Math.Between(3000, 7000);
-        this.time.delayedCall(delay, () => {
-            spawnLaser(this);
-            scheduleNextLaser();
-        });
-    };
-    scheduleNextLaser();
+    scheduleNextLaser(this);
 
     // 設定敵人彈跳球計時器 (一般模式頻率降低)
     const scheduleNextBall = () => {
@@ -271,36 +261,16 @@ function create() {
         const angle = Phaser.Math.Angle.Between(bullet.x, bullet.y, target.x, target.y);
         loliHP -= damage;
         loliHPText.setText(`蘿莉血量: ${loliHP}`);
+        
         if (loliHP <= 0) {
-            target.setActive(false).setVisible(false).body.enable = false;
-            scene.cameras.main.flash(500, 255, 0, 0);
-
-            // 羅莉死後立刻清除羅莉發出的所有攻擊，但不清除玩家的子彈
-            if (shockwaves) shockwaves.clear(true, true);
-            if (lasers) lasers.clear(true, true);
-            if (enemyBalls) enemyBalls.clear(true, true);
-
-            scene.time.delayedCall(3000, () => {
-                loliHP = loliMaxHP; loliHPText.setText(`蘿莉血量: ${loliHP}`);
-                target.setActive(true).setVisible(true).body.enable = true;
-                target.setPosition(scene.cameras.main.width / 4, scene.cameras.main.height - 150);
-                
-                // 復活後取消狂暴模式並清除相關場景物件
-                target.isBerserk = false;
-                if (scene.berserkBg) { scene.berserkBg.destroy(); scene.berserkBg = null; }
-                if (scene.berserkCeiling) { scene.berserkCeiling.destroy(); scene.berserkCeiling = null; }
-                if (scene.berserkFloor) { scene.berserkFloor.destroy(); scene.berserkFloor = null; }
-                if (scene.berserkGunLeft) { scene.berserkGunLeft.destroy(); scene.berserkGunLeft = null; }
-                if (scene.berserkGunRight) { scene.berserkGunRight.destroy(); scene.berserkGunRight = null; }
-
-                target.body.allowGravity = true; // 恢復重力
-                target.clearTint();              // 清除紅色濾鏡
-                scheduleNextLaser();             // 重啟一般模式雷射計時器
-            });
+            handleLoliDeath(scene, target);
+        } else {
+            target.isHit = true; 
+            target.hitStunTimer = stunTime;
+            target.setVelocity(Math.cos(angle) * force, Math.sin(angle) * force - 200);
+            target.setTint(0xff0000); 
+            scene.cameras.main.shake(100, 0.005);
         }
-        target.isHit = true; target.hitStunTimer = stunTime;
-        target.setVelocity(Math.cos(angle) * force, Math.sin(angle) * force - 200);
-        target.setTint(0xff0000); scene.cameras.main.shake(100, 0.005);
         bullet.destroy();
     }
 
@@ -968,16 +938,9 @@ function createDashShield(scene, player, angle) {
                 loli.setTint(0xff0000);
                 scene.cameras.main.shake(100, 0.005);
                 
-                // 如果血量歸零，複用原本的死亡邏輯 (檢查 handleLoliHit 的內容)
+                // 如果血量歸零，觸發全域死亡邏輯 (修正 Bug)
                 if (loliHP <= 0) {
-                    // 這裡觸發死亡流程 (簡化處理，因為 update 會處理 HP <= 0 的視覺消失)
-                    loli.setActive(false).setVisible(false).body.enable = false;
-                    scene.cameras.main.flash(500, 255, 0, 0);
-                    
-                    // 清除所有攻擊
-                    if (shockwaves) shockwaves.clear(true, true);
-                    if (lasers) lasers.clear(true, true);
-                    if (enemyBalls) enemyBalls.clear(true, true);
+                    handleLoliDeath(scene, loli);
                 }
 
                 hasHit = true; // 標記已命中
@@ -986,4 +949,53 @@ function createDashShield(scene, player, angle) {
     };
 
     scene.events.on('update', onUpdate);
+}
+
+/**
+ * 處理蘿莉死亡與重生邏輯 (新增)
+ * @param {Phaser.Scene} scene 
+ * @param {Phaser.GameObjects.Sprite} target 
+ */
+function handleLoliDeath(scene, target) {
+    target.setActive(false).setVisible(false).body.enable = false;
+    scene.cameras.main.flash(500, 255, 0, 0);
+
+    // 羅莉死後立刻清除羅莉發出的所有攻擊
+    if (shockwaves) shockwaves.clear(true, true);
+    if (lasers) lasers.clear(true, true);
+    if (enemyBalls) enemyBalls.clear(true, true);
+
+    scene.time.delayedCall(3000, () => {
+        loliHP = loliMaxHP; 
+        loliHPText.setText(`蘿莉血量: ${loliHP}`);
+        target.setActive(true).setVisible(true).body.enable = true;
+        target.setPosition(scene.cameras.main.width / 4, scene.cameras.main.height - 150);
+        
+        // 復活後取消狂暴模式並清除相關場景物件
+        target.isBerserk = false;
+        if (scene.berserkBg) { scene.berserkBg.destroy(); scene.berserkBg = null; }
+        if (scene.berserkCeiling) { scene.berserkCeiling.destroy(); scene.berserkCeiling = null; }
+        if (scene.berserkFloor) { scene.berserkFloor.destroy(); scene.berserkFloor = null; }
+        if (scene.berserkGunLeft) { scene.berserkGunLeft.destroy(); scene.berserkGunLeft = null; }
+        if (scene.berserkGunRight) { scene.berserkGunRight.destroy(); scene.berserkGunRight = null; }
+
+        target.body.allowGravity = true; // 恢復重力
+        target.clearTint();              // 清除受擊顏色
+        scheduleNextLaser(scene);        // 重啟一般模式雷射計時器
+    });
+}
+
+/**
+ * 設定隨機雷射計時器 (原本在 create 內，改為全域)
+ * @param {Phaser.Scene} scene 
+ */
+function scheduleNextLaser(scene) {
+    // 如果進入狂暴模式，雷射邏輯會轉由 spawnLaser 內部連鎖觸發
+    if (loli.isBerserk) return; 
+
+    const delay = Phaser.Math.Between(3000, 7000);
+    scene.time.delayedCall(delay, () => {
+        spawnLaser(scene);
+        scheduleNextLaser(scene);
+    });
 }
