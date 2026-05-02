@@ -142,8 +142,7 @@ function create() {
 
     // 敵人彈跳球碰撞邏輯
     this.physics.add.collider(enemyBalls, platforms); // 碰到地板會反彈
-    this.physics.add.collider(enemyBalls, [mgBullets, sgBullets, snBullets], (ball, bullet) => {
-        bullet.destroy(); // 玩家子彈消失
+    this.physics.add.collider(enemyBalls, [mgBullets, sgBullets, snBullets], (ball, da
         // ball 會因為 collider 自然反彈
     });
 
@@ -216,11 +215,14 @@ function create() {
     this.triggerCrash = triggerCrash; // 將當機函式掛載到場景，供外部雷射函式使用 (新增)
 
     this.physics.add.collider(player, loli, () => {
-        if (!loli.isBerserk) triggerCrash(); // 狂暴模式下碰到玩家沒事
+        triggerCrash(); // 無論是否狂暴，碰到玩家均觸發當機 (修正)
     });
     this.physics.add.overlap(player, shockwaves, triggerCrash); // 玩家碰到衝擊波也會當機
-    this.physics.add.overlap(player, lasers, triggerCrash);     // 玩家碰到紫色雷射也會當機
     this.physics.add.overlap(player, enemyBalls, triggerCrash); // 玩家碰到彈跳球也會當機
+
+    // 移除 lasers 的全域 overlap，改由 update 內手動判定以確保精確度 (修正)
+    // this.physics.add.overlap(player, lasers, triggerCrash); 
+
 
     // 設定隨機雷射計時器 (3-7 秒觸發一次)
     scheduleNextLaser(this);
@@ -229,11 +231,9 @@ function create() {
     const scheduleNextBall = () => {
         const delay = loli.isBerserk ? 2000 : Phaser.Math.Between(15000, 25000); // 一般模式從 10-15s 增加到 15-25s (修改)
         this.time.delayedCall(delay, () => {
-            // 暫時取消狂暴模式的丟球攻擊，僅在一般模式執行 (修改)
+            // 僅在一般模式執行丟球攻擊，狂暴模式已依要求關閉 (修正)
             if (!loli.isBerserk) {
                 spawnEnemyBall(this);
-            } else {
-                // spawnEnemyBall(this); // 狂暴模式丟球暫時註解，之後會加回去
             }
             scheduleNextBall();
         });
@@ -472,12 +472,73 @@ function update(time, delta) {
 
     if (loli.active) {
         // --- 雷射即時碰撞判定 (優化) ---
-        // Arcade 物理的 overlap 在靜止物體生成時可能漏判，這裡手動檢查矩形重疊 (新增)
+        // Arcade 物理不支援旋轉矩形，這裡手動進行多重幾何判定以確保傷害偵測 (修正)
+        const playerRect = player.getBounds();
         lasers.getChildren().forEach(laser => {
-            const playerBounds = player.getBounds();
-            const laserBounds = laser.getBounds();
-            if (Phaser.Geom.Intersects.RectangleToRectangle(playerBounds, laserBounds)) {
-                this.triggerCrash();
+            if (!laser.active) return;
+            
+            // 1. 對於沒旋轉的雷射 (如天降雷射)，使用快速的矩形判定
+            if (Math.abs(laser.angle) < 0.1) {
+                if (Phaser.Geom.Intersects.RectangleToRectangle(playerRect, laser.getBounds())) {
+                    this.triggerCrash();
+                }
+                return;
+            }
+
+            // 2. 對於有旋轉的雷射 (如雷射槍)，使用多重判定提高可靠性
+            try {
+                const rad = laser.rotation;
+                const length = 1500;
+                const ox = laser.originX;
+                const oy = laser.originY;
+                const w = laser.width;
+                const h = laser.height;
+                const lx = laser.x;
+                const ly = laser.y;
+                const direction = (ox === 0) ? 1 : -1;
+
+                // 方法 A: 線段 vs 矩形判定 (針對雷射中心線)
+                const line = new Phaser.Geom.Line(
+                    lx, 
+                    ly, 
+                    lx + Math.cos(rad) * length * direction, 
+                    ly + Math.sin(rad) * length * direction
+                );
+
+                if (Phaser.Geom.Intersects.LineToRectangle(line, playerRect)) {
+                    this.triggerCrash();
+                    return;
+                }
+
+                // 方法 B: 點在多邊形內判定 (針對玩家多個關鍵點)
+                const cos = Math.cos(rad);
+                const sin = Math.sin(rad);
+                const points = [
+                    { x: -ox * w, y: -oy * h },
+                    { x: (1 - ox) * w, y: -oy * h },
+                    { x: (1 - ox) * w, y: (1 - oy) * h },
+                    { x: -ox * w, y: (1 - oy) * h }
+                ];
+                const corners = points.map(p => ({
+                    x: lx + p.x * cos - p.y * sin,
+                    y: ly + p.x * sin + p.y * cos
+                }));
+                const laserPoly = new Phaser.Geom.Polygon(corners);
+                
+                // 檢查玩家的中心點與四個角點
+                const testPoints = [
+                    { x: player.x, y: player.y },
+                    { x: playerRect.left, y: playerRect.top },
+                    { x: playerRect.right, y: playerRect.top },
+                    { x: playerRect.right, y: playerRect.bottom },
+                    { x: playerRect.left, y: playerRect.bottom }
+                ];
+                
+                if (testPoints.some(p => Phaser.Geom.Polygon.ContainsPoint(laserPoly, p))) {
+                    this.triggerCrash();
+                }
+            } catch (e) {
+                // 忽略幾何錯誤
             }
         });
 
@@ -570,14 +631,10 @@ function update(time, delta) {
                             this.physics.add.existing(laser);
                             lasers.add(laser);
 
-                            // 確保玩家碰到雷射會觸發當機
-                            this.physics.add.overlap(player, laser, this.triggerCrash);
-
-                            // 必須在加入群組後設定物理屬性，確保不被群組預設值覆蓋
+                            // 對於旋轉雷射，我們在 update 內手動進行精確的 Polygon 幾何判定
+                            // 這裡禁用物理本體避免錯誤的 AABB 重疊判定 (修正)
                             if (laser.body) {
-                                laser.body.allowGravity = false; // 禁用重力，防止光束往下掉
-                                laser.body.immovable = true;     // 確保光束固定
-                                laser.body.setVelocity(0, 0);    // 強制速度為零
+                                laser.body.enable = false;
                             }
 
                             // 3. 殘留 0.5 秒後消失
@@ -766,9 +823,6 @@ function spawnLaser(scene) {
                 const laserV = scene.add.rectangle(randomX, height / 2, 25, height, 0xff00ff);
                 scene.physics.add.existing(laserV);
                 lasers.add(laserV);
-
-                // 確保玩家碰到天降雷射也會當機 (新增)
-                scene.physics.add.overlap(player, laserV, scene.triggerCrash);
 
                 laserV.body.allowGravity = false;
                 laserV.body.setImmovable(true);
