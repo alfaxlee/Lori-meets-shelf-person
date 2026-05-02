@@ -78,7 +78,7 @@ let loliHPText;
 
 // --- 控制變數 ---
 let isActuallyMobile = false; // 真實手機偵測
-let forceControls = true;     // 是否強制顯示搖桿 (依要求設為 true)
+let forceControls = false;    // 關閉強制顯示，確保非手機不顯示 (修改)
 let mobileInput = { left: false, right: false, up: false, fireMg: false, fireSg: false, fireSn: false, reload: false, dash: false };
 let joystickBase;
 let joystickThumb;
@@ -142,7 +142,8 @@ function create() {
 
     // 敵人彈跳球碰撞邏輯
     this.physics.add.collider(enemyBalls, platforms); // 碰到地板會反彈
-    this.physics.add.collider(enemyBalls, [mgBullets, sgBullets, snBullets], (ball, da
+    this.physics.add.collider(enemyBalls, [mgBullets, sgBullets, snBullets], (ball, bullet) => {
+        bullet.destroy(); // 玩家子彈消失 (修正語法錯誤)
         // ball 會因為 collider 自然反彈
     });
 
@@ -220,10 +221,6 @@ function create() {
     this.physics.add.overlap(player, shockwaves, triggerCrash); // 玩家碰到衝擊波也會當機
     this.physics.add.overlap(player, enemyBalls, triggerCrash); // 玩家碰到彈跳球也會當機
 
-    // 移除 lasers 的全域 overlap，改由 update 內手動判定以確保精確度 (修正)
-    // this.physics.add.overlap(player, lasers, triggerCrash); 
-
-
     // 設定隨機雷射計時器 (3-7 秒觸發一次)
     scheduleNextLaser(this);
 
@@ -245,8 +242,8 @@ function create() {
         repositionMobileControls(this);
     });
 
-    // 只有在真實手機裝置上才建立控制項 (修改：確保電腦版不顯示)
-    if (isActuallyMobile) {
+    // 只有在真實手機裝置上才建立控制項 (修正：支援 forceControls)
+    if (isActuallyMobile || forceControls) {
         setupMobileControls(this);
     }
 
@@ -286,29 +283,27 @@ function create() {
         left: Phaser.Input.Keyboard.KeyCodes.A,
         right: Phaser.Input.Keyboard.KeyCodes.D,
         reload: Phaser.Input.Keyboard.KeyCodes.R,
-        dash: Phaser.Input.Keyboard.KeyCodes.Q // 將衝刺鍵改為 Q
+        dash: Phaser.Input.Keyboard.KeyCodes.Q 
     });
 }
 
 function setupMobileControls(scene) {
     const height = scene.cameras.main.height;
     const width = scene.cameras.main.width;
-    // 縮小為 2/3 (底座 133, 搖桿頭 67)
-    joystickBase = scene.add.circle(180, height - 180, 133, 0x888888, 0.5).setScrollFactor(0).setDepth(1000);
-    joystickThumb = scene.add.circle(180, height - 180, 67, 0xcccccc, 0.8).setScrollFactor(0).setDepth(1001).setInteractive();
+    // 修正：初始位置改為 120, height - 120 以符合 reposition 邏輯
+    joystickBase = scene.add.circle(120, height - 120, 133, 0x888888, 0.5).setScrollFactor(0).setDepth(1000);
+    joystickThumb = scene.add.circle(120, height - 120, 67, 0xcccccc, 0.8).setScrollFactor(0).setDepth(1001).setInteractive();
     scene.input.setDraggable(joystickThumb);
     scene.input.on('drag', (pointer, gameObject, dragX, dragY) => {
         if (gameObject === joystickThumb) {
-            // 計算拖拽距離與角度，支援多點觸控下的獨立操作
             const dx = dragX - joystickBase.x; 
             const dy = dragY - joystickBase.y;
-            const dist = Math.min(Math.sqrt(dx * dx + dy * dy), 107);
+            const dist = Math.min(Math.sqrt(dx * dx + dy * dy), 66);
             const angle = Math.atan2(dy, dx);
             
             gameObject.x = joystickBase.x + Math.cos(angle) * dist;
             gameObject.y = joystickBase.y + Math.sin(angle) * dist;
             
-            // 更新移動狀態
             mobileInput.left = (dx < -40); 
             mobileInput.right = (dx > 40); 
             mobileInput.up = (dy < -40);
@@ -318,34 +313,22 @@ function setupMobileControls(scene) {
         joystickThumb.x = joystickBase.x; joystickThumb.y = joystickBase.y;
         mobileInput.left = mobileInput.right = mobileInput.up = false;
     });
-    // 按鈕縮小為 2/3 (半徑改為 93)
+    
     const rx = width - 150; const ry = height - 150;
     createBtn(scene, rx, ry - 240, 'MG', 0xffff00, 'fireMg');
     createBtn(scene, rx - 200, ry - 170, 'SG', 0x00ff00, 'fireSg');
     createBtn(scene, rx - 240, ry, 'SN', 0x00ffff, 'fireSn');
     createBtn(scene, rx, ry, 'RE', 0xff00ff, 'reload');
-    createBtn(scene, rx - 440, ry, 'DASH', 0x00ffff, 'dash'); // 新增衝刺按鈕 (新增)
+    createBtn(scene, rx - 440, ry, 'DASH', 0x00ffff, 'dash'); 
 }
 
 function createBtn(scene, x, y, label, color, key) {
-    // 按鈕半徑縮小至 93
     const b = scene.add.circle(x, y, 93, color, 0.6).setScrollFactor(0).setDepth(1000).setInteractive();
-    // 文字縮小至 27px
     const t = scene.add.text(x, y, label, { fontSize: '27px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(1001);
     
-    // 支援多點觸控的按鈕邏輯
-    b.on('pointerdown', (pointer) => { 
-        mobileInput[key] = true; 
-        b.setAlpha(0.9); 
-    });
-    b.on('pointerup', (pointer) => { 
-        mobileInput[key] = false; 
-        b.setAlpha(0.6); 
-    });
-    b.on('pointerout', (pointer) => { 
-        mobileInput[key] = false; 
-        b.setAlpha(0.6); 
-    });
+    b.on('pointerdown', (pointer) => { mobileInput[key] = true; b.setAlpha(0.9); });
+    b.on('pointerup', (pointer) => { mobileInput[key] = false; b.setAlpha(0.6); });
+    b.on('pointerout', (pointer) => { mobileInput[key] = false; b.setAlpha(0.6); });
     
     if (!scene.mobileButtons) scene.mobileButtons = [];
     scene.mobileButtons.push({ btn: b, txt: t, originalOffsetX: scene.cameras.main.width - x, originalOffsetY: scene.cameras.main.height - y });
@@ -363,78 +346,62 @@ function repositionMobileControls(scene) {
 }
 
 function update(time, delta) {
-    // 能量條 UI 更新 (新增)
     energyBar.clear();
     energyBar.fillStyle(0x888888, 0.8);
-    energyBar.fillRect(20, 100, 200, 20); // 灰色背景框
-    energyBar.fillStyle(dashEnergyColor, 1); // 使用變數決定顏色 (修改)
-    energyBar.fillRect(20, 100, 200 * (dashEnergy / maxDashEnergy), 20); // 前進條
+    energyBar.fillRect(20, 100, 200, 20); 
+    energyBar.fillStyle(dashEnergyColor, 1); 
+    energyBar.fillRect(20, 100, 200 * (dashEnergy / maxDashEnergy), 20); 
 
-    // 能量回復 (新增)
     if (dashEnergy < maxDashEnergy) {
         dashEnergy = Math.min(maxDashEnergy, dashEnergy + energyRegen);
     }
 
-    // 衝刺觸發偵測 (新增)
     const dashPressed = Phaser.Input.Keyboard.JustDown(this.keys.dash) || mobileInput.dash;
     if (dashPressed) {
         if (dashEnergy >= dashCost && !isDashing) {
-            // 執行衝刺
             dashEnergy -= dashCost;
             isDashing = true;
-            isInvincible = true; // 開啟無敵 (新增)
-            player.setAlpha(0.5); // 變透明表示衝刺中
+            isInvincible = true; 
+            player.setAlpha(0.5); 
 
-            // 決定衝刺方向與動能 (修正：速度提升 1.5 倍)
             let angle;
-            let speed = 2400; // 預設速度 (從 1600 提升至 2400)
+            let speed = 2400; 
             if (mobileInput.dash) {
-                // 手機按鈕觸發：固定往敵人的反方向衝刺
                 angle = Phaser.Math.Angle.Between(loli.x, loli.y, player.x, player.y);
             } else {
-                // 鍵盤 Q 鍵觸發：朝向滑鼠位置，並根據距離決定動能
                 const mousePointer = this.input.activePointer;
                 angle = Phaser.Math.Angle.Between(player.x, player.y, mousePointer.x, mousePointer.y);
-                
-                // 計算距離並將其映射至速度 (範圍提升 1.5 倍：1200 ~ 3600)
                 const dist = Phaser.Math.Distance.Between(player.x, player.y, mousePointer.x, mousePointer.y);
-                speed = Phaser.Math.Clamp(dist * 6, 1200, 3600); // 乘數從 4 改為 6
+                speed = Phaser.Math.Clamp(dist * 6, 1200, 3600); 
             }
             
             player.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-            player.body.allowGravity = false; // 衝刺時無視重力
+            player.body.allowGravity = false; 
 
-            // 產生反方向的塵埃效果 (新增)
             createDashDust(this, player.x, player.y, angle);
-            
-            // 產生衝刺防護網效果 (新增)
             createDashShield(this, player, angle);
 
-            // 清除舊的無敵結束計時器 (如果有的話) (新增)
             if (this.invincibilityTimer) this.invincibilityTimer.remove();
 
-            // 150 毫秒後結束物理衝刺狀態，但保持無敵 (修改)
             this.time.delayedCall(150, () => {
-                isDashing = false; // 恢復控制
+                isDashing = false; 
                 player.body.allowGravity = true;
-                player.setAlpha(0.7); // 稍微變淡表示仍有無敵效果
+                player.setAlpha(0.7); 
                 
-                // 1000 毫秒後真正結束無敵狀態 (新增)
                 this.invincibilityTimer = this.time.delayedCall(1000, () => {
                     isInvincible = false;
                     player.setAlpha(1);
                 });
             });
         } else if (dashEnergy < dashCost && !isDashing) {
-            // 能量不足回饋：變紅並震動
             this.tweens.add({
                 targets: energyBar,
                 x: '+=5',
                 duration: 50,
                 yoyo: true,
                 repeat: 3,
-                onStart: () => { dashEnergyColor = 0xff0000; }, // 改用顏色變數 (修正錯誤)
-                onComplete: () => { energyBar.x = 0; dashEnergyColor = 0x00ffff; } // 恢復顏色 (修正錯誤)
+                onStart: () => { dashEnergyColor = 0xff0000; }, 
+                onComplete: () => { energyBar.x = 0; dashEnergyColor = 0x00ffff; } 
             });
         }
         mobileInput.dash = false;
@@ -450,7 +417,7 @@ function update(time, delta) {
 
     const pointer = this.input.activePointer;
     
-    // 發射邏輯判斷：如果是手機，則完全忽略螢幕點擊 (pointer.leftButtonDown)，只看虛擬按鍵
+    // 修正：補上方法調用的括號 ()，解決語法調用錯誤
     const triggerMg = isActuallyMobile ? mobileInput.fireMg : (pointer.leftButtonDown() || mobileInput.fireMg);
     if (triggerMg && !mgIsReloading && mgAmmo > 0) {
         if (time > lastMgFired + mgFireRate) { fireMG(this, pointer, mobileInput.fireMg); lastMgFired = time; }
@@ -471,13 +438,10 @@ function update(time, delta) {
     }
 
     if (loli.active) {
-        // --- 雷射即時碰撞判定 (優化) ---
-        // Arcade 物理不支援旋轉矩形，這裡手動進行多重幾何判定以確保傷害偵測 (修正)
         const playerRect = player.getBounds();
         lasers.getChildren().forEach(laser => {
             if (!laser.active) return;
             
-            // 1. 對於沒旋轉的雷射 (如天降雷射)，使用快速的矩形判定
             if (Math.abs(laser.angle) < 0.1) {
                 if (Phaser.Geom.Intersects.RectangleToRectangle(playerRect, laser.getBounds())) {
                     this.triggerCrash();
@@ -485,7 +449,6 @@ function update(time, delta) {
                 return;
             }
 
-            // 2. 對於有旋轉的雷射 (如雷射槍)，使用多重判定提高可靠性
             try {
                 const rad = laser.rotation;
                 const length = 1500;
@@ -497,20 +460,13 @@ function update(time, delta) {
                 const ly = laser.y;
                 const direction = (ox === 0) ? 1 : -1;
 
-                // 方法 A: 線段 vs 矩形判定 (針對雷射中心線)
-                const line = new Phaser.Geom.Line(
-                    lx, 
-                    ly, 
-                    lx + Math.cos(rad) * length * direction, 
-                    ly + Math.sin(rad) * length * direction
-                );
+                const line = new Phaser.Geom.Line(lx, ly, lx + Math.cos(rad) * length * direction, ly + Math.sin(rad) * length * direction);
 
                 if (Phaser.Geom.Intersects.LineToRectangle(line, playerRect)) {
                     this.triggerCrash();
                     return;
                 }
 
-                // 方法 B: 點在多邊形內判定 (針對玩家多個關鍵點)
                 const cos = Math.cos(rad);
                 const sin = Math.sin(rad);
                 const points = [
@@ -525,7 +481,6 @@ function update(time, delta) {
                 }));
                 const laserPoly = new Phaser.Geom.Polygon(corners);
                 
-                // 檢查玩家的中心點與四個角點
                 const testPoints = [
                     { x: player.x, y: player.y },
                     { x: playerRect.left, y: playerRect.top },
@@ -534,47 +489,35 @@ function update(time, delta) {
                     { x: playerRect.left, y: playerRect.bottom }
                 ];
                 
-                if (testPoints.some(p => Phaser.Geom.Polygon.ContainsPoint(laserPoly, p))) {
+                // 修正：使用正確的 Phaser API (Phaser.Geom.Polygon.Contains) 代替不存在的方法
+                if (testPoints.some(p => Phaser.Geom.Polygon.Contains(laserPoly, p.x, p.y))) {
                     this.triggerCrash();
                 }
             } catch (e) {
-                // 忽略幾何錯誤
             }
         });
 
-        // --- 狂暴模式狀態偵測 ---
         if (loliHP < 150 && !loli.isBerserk) {
             loli.isBerserk = true;
-            loli.body.allowGravity = false; // 進入飛行模式，取消重力
-            loli.setTint(0xff0000);        // 變色提醒
+            loli.body.allowGravity = false; 
+            loli.setTint(0xff0000);        
 
-            // 建立狂暴模式背景 (#ff00ff)
             const width = this.cameras.main.width;
             const height = this.cameras.main.height;
 
-            // 設置狂暴背景圖 (使用蘿莉過關圖)
             this.berserkBg = this.add.image(width / 2, height / 2, 'loliWin').setDepth(-1);
             this.berserkBg.setDisplaySize(width, height);
-            
-            // 建立上方天花板
             this.berserkCeiling = this.add.rectangle(width / 2, 10, width, 20, 0xff00ff);
-            this.physics.add.existing(this.berserkCeiling, true); // 靜態物體
-            
-            // 建立下方地板 (覆蓋原本的地板)
+            this.physics.add.existing(this.berserkCeiling, true); 
             this.berserkFloor = this.add.rectangle(width / 2, height - 50, width, 40, 0xff00ff);
-            this.physics.add.existing(this.berserkFloor, true); // 靜態物體
+            this.physics.add.existing(this.berserkFloor, true); 
 
-            // 設置玩家與羅莉與新地板/天花板的碰撞
             this.physics.add.collider(player, [this.berserkCeiling, this.berserkFloor]);
             this.physics.add.collider(loli, [this.berserkCeiling, this.berserkFloor]);
 
-            // 設置敵人彈跳球碰到天花板消失 (新增)
-            this.physics.add.collider(enemyBalls, this.berserkCeiling, (ball) => {
-                ball.destroy(); // 碰到狂暴模式天花板時銷毀
-            });
-            this.physics.add.collider(enemyBalls, this.berserkFloor); // 碰到地板維持反彈
+            this.physics.add.collider(enemyBalls, this.berserkCeiling, (ball) => { ball.destroy(); });
+            this.physics.add.collider(enemyBalls, this.berserkFloor); 
 
-            // 建立左右兩側的紫色雷射槍 (修改：細管長度加倍至 80，總長維持 400)
             this.berserkGunLeft = this.add.container(0, height / 2);
             const bodyLeft = this.add.rectangle(60, 0, 320, 80, 0xff00ff);
             const barrelLeft = this.add.rectangle(260, 0, 80, 30, 0xff00ff);
@@ -585,20 +528,14 @@ function update(time, delta) {
             const barrelRight = this.add.rectangle(-260, 0, 80, 30, 0xff00ff);
             this.berserkGunRight.add([bodyRight, barrelRight]);
 
-            // 設定狂暴雷射槍攻擊循環 (修改：頻率改成每兩秒一次，輪流射擊：右 -> 左 -> 右)
-            let nextIsLeft = false; // 追蹤下一次該哪邊射擊 (false 為右, true 為左)
+            let nextIsLeft = false; 
             const scheduleBerserkGunAttack = () => {
                 if (!loli.active || !loli.isBerserk) return;
-
-                // 決定哪一邊的雷射槍射擊，並切換下一次的目標
                 const isLeft = nextIsLeft;
                 const targetGun = isLeft ? this.berserkGunLeft : this.berserkGunRight;
-                nextIsLeft = !nextIsLeft; // 切換下一次的開火方
-
-                // 1. 隨機決定目標角度 (最大 45 度)
+                nextIsLeft = !nextIsLeft; 
                 const targetAngle = Phaser.Math.Between(-45, 45);
 
-                // 2. 快速轉向目標角度 (0.3 秒)
                 this.tweens.add({
                     targets: targetGun,
                     angle: targetAngle,
@@ -606,69 +543,43 @@ function update(time, delta) {
                     ease: 'Cubic.easeOut',
                     onComplete: () => {
                         if (!loli.active || !loli.isBerserk) return;
-
-                        // 3. 射出雷射光 (使用世界座標，避免 Container 內的物理衝突導致光束掉落)
                         const rad = Phaser.Math.DegToRad(targetGun.angle);
-                        const offsetX = isLeft ? 260 : -260; // 槍管在 Container 內的偏移量
+                        const offsetX = isLeft ? 260 : -260; 
                         const worldX = targetGun.x + Math.cos(rad) * offsetX;
                         const worldY = targetGun.y + Math.sin(rad) * offsetX;
-                        
-                        // 1. 預警階段：在發射路徑上先出現一條細紅線 (新增)
                         const laserOrigin = isLeft ? 0 : 1;
                         const warningLine = this.add.rectangle(worldX, worldY, 1500, 2, 0xff0000, 0.5).setOrigin(laserOrigin, 0.5);
                         warningLine.setAngle(targetGun.angle);
 
-                        // 0.5 秒預警後發射正式雷射 (新增)
                         this.time.delayedCall(500, () => {
-                            warningLine.destroy(); // 移除預警線
-
+                            warningLine.destroy(); 
                             if (!loli.active || !loli.isBerserk) return;
-
-                            // 2. 攻擊階段：射出正式雷射光
                             const laser = this.add.rectangle(worldX, worldY, 1500, 20, 0xff00ff, 0.8).setOrigin(laserOrigin, 0.5);
-                            laser.setAngle(targetGun.angle); // 設定與槍枝相同的角度
-                            
+                            laser.setAngle(targetGun.angle); 
                             this.physics.add.existing(laser);
                             lasers.add(laser);
-
-                            // 對於旋轉雷射，我們在 update 內手動進行精確的 Polygon 幾何判定
-                            // 這裡禁用物理本體避免錯誤的 AABB 重疊判定 (修正)
-                            if (laser.body) {
-                                laser.body.enable = false;
-                            }
-
-                            // 3. 殘留 0.5 秒後消失
+                            if (laser.body) laser.body.enable = false;
                             this.time.delayedCall(500, () => {
                                 laser.destroy();
-                                
-                                // 4. 每兩秒循環一次 (轉向 0.3s + 預警 0.5s + 殘留 0.5s + 延遲 0.7s = 2.0s) (修改延遲)
-                                if (loli.isBerserk) {
-                                    this.time.delayedCall(700, scheduleBerserkGunAttack);
-                                }
+                                if (loli.isBerserk) this.time.delayedCall(700, scheduleBerserkGunAttack);
                             });
                         });
                     }
                 });
             };
             scheduleBerserkGunAttack();
-
-            // 立即啟動狂暴模式的連鎖雷射
             spawnLaser(this);
         }
 
         if (loli.isHit) {
             loli.hitStunTimer -= delta; if (loli.hitStunTimer <= 0) { loli.isHit = false; loli.isBerserk ? loli.setTint(0xff0000) : loli.clearTint(); }
         } else if (loli.isBerserk) {
-            // --- 狂暴飛行移動模式 ---
-            // 使用正弦波產生在空中的飛行軌跡 (x: 左右, y: 上下)
             loli.setVelocityX(Math.sin(time / 500) * 400);
             loli.setVelocityY(Math.cos(time / 1000) * 200);
         } else {
-            // --- 一般地面移動模式 ---
             if (loli.x < player.x) loli.setVelocityX(200); else if (loli.x > player.x) loli.setVelocityX(-200);
             else loli.setVelocityX(0);
             
-            // 偵測落地
             if (loli.body.touching.down) {
                 if (loli.wasInAir) {
                     const fallDistance = Math.max(0, loli.y - loli.highestY);
@@ -676,80 +587,46 @@ function update(time, delta) {
                     loli.wasInAir = false;
                 }
             } else {
-                if (!loli.wasInAir) {
-                    loli.highestY = loli.y; // 開始跳躍/墜落時記錄起始高度
-                    loli.wasInAir = true;
-                } else {
-                    loli.highestY = Math.min(loli.highestY, loli.y); // 記錄在空中的最高點
-                }
+                if (!loli.wasInAir) { loli.highestY = loli.y; loli.wasInAir = true; }
+                else loli.highestY = Math.min(loli.highestY, loli.y);
             }
-
             if (player.y < loli.y - 50 && loli.body.touching.down) loli.setVelocityY(-275);
         }
     }
 }
 
-// 建立落地衝擊波 (根據摔落高度決定大小)
 function createShockwaves(scene, x, y, fallHeight) {
-    // 根據高度計算縮放係數 (基本 0.5, 每 100 像素增加一些)
     const scaleFactor = Math.min(2.5, 0.5 + (fallHeight / 200));
     const directions = [-1, 1];
-    const angleRad = Phaser.Math.DegToRad(25); // 設定為 25 度
-    
+    const angleRad = Phaser.Math.DegToRad(25); 
     directions.forEach(dir => {
-        // 基礎尺寸 80x40，再乘以縮放係數
         const sw = scene.add.rectangle(x, y - 20, 80 * scaleFactor, 40 * scaleFactor, 0xffffff, 0.8);
         scene.physics.add.existing(sw);
         shockwaves.add(sw);
-        
         sw.body.allowGravity = false;
-        // 速度隨高度增加，並使用三角函數計算 25 度角的分量
         const speed = 400 + (fallHeight * 0.6);
         sw.body.setVelocity(dir * speed * Math.cos(angleRad), -speed * Math.sin(angleRad));
-        
-        // 旋轉矩形使其對齊移動方向 (25 度)
-        // dir 為 1 時（右邊）旋轉為負，dir 為 -1 時（左邊）旋轉為正
         const rotation = dir === 1 ? -angleRad : angleRad;
         sw.setRotation(rotation);
-        
-        // 衝擊波生命週期：變大並淡出
         scene.tweens.add({
-            targets: sw,
-            alpha: 0,
-            scaleX: 1.5,
-            scaleY: 1.5,
-            duration: 500 + (fallHeight * 0.5),
-            onComplete: () => {
-                sw.destroy();
-            }
+            targets: sw, alpha: 0, scaleX: 1.5, scaleY: 1.5, duration: 500 + (fallHeight * 0.5),
+            onComplete: () => { sw.destroy(); }
         });
     });
 }
 
 function triggerReload(scene, weaponType) {
-    // 彈弓填裝 (Slingshot / MG)
     if ((!weaponType || weaponType === 'mg') && mgAmmo < mgMaxAmmo && !mgIsReloading) {
         mgIsReloading = true; mgText.setText('RELOADING...');
-        scene.time.delayedCall(3000, () => { 
-            mgAmmo = mgMaxAmmo; mgIsReloading = false; 
-            mgText.setText(`Slingshot: ${mgAmmo}/${mgMaxAmmo}`); 
-        });
+        scene.time.delayedCall(3000, () => { mgAmmo = mgMaxAmmo; mgIsReloading = false; mgText.setText(`Slingshot: ${mgAmmo}/${mgMaxAmmo}`); });
     }
-    // 霰彈槍填裝 (Shotgun / SG)
     if ((!weaponType || weaponType === 'sg') && sgAmmo < sgMaxAmmo && !sgIsReloading) {
         sgIsReloading = true; sgText.setText('RELOADING...');
-        scene.time.delayedCall(1000, () => { 
-            sgAmmo = sgMaxAmmo; sgIsReloading = false; 
-            sgText.setText(`Shotgun: ${sgAmmo}/${sgMaxAmmo}`); 
-        });
+        scene.time.delayedCall(1000, () => { sgAmmo = sgMaxAmmo; sgIsReloading = false; sgText.setText(`Shotgun: ${sgAmmo}/${sgMaxAmmo}`); });
     }
-    // 狙擊槍填裝 (Sniper / SN)
     if ((!weaponType || weaponType === 'sn') && snAmmo < snMaxAmmo && !snIsReloading) {
         snIsReloading = true; snText.setText('RELOADING...');
-        scene.time.delayedCall(5000, () => { 
-            snAmmo = snMaxAmmo; snIsReloading = false; 
-            snText.setText(`Sniper: ${snAmmo}/${snMaxAmmo}`); 
-        });
+        scene.time.delayedCall(5000, () => { snAmmo = snMaxAmmo; snIsReloading = false; snText.setText(`Sniper: ${snAmmo}/${snMaxAmmo}`); });
     }
 }
 
@@ -759,7 +636,7 @@ function fireMG(scene, pointer, autoAim) {
     if (bullet) {
         bullet.setScale(0.05).setVelocity(Math.cos(angle) * 1200, Math.sin(angle) * 1200).setCollideWorldBounds(true).setBounce(1);
         bullet.body.onWorldBounds = true; mgAmmo--; mgText.setText(`Slingshot: ${mgAmmo}/${mgMaxAmmo}`);
-        if (mgAmmo <= 0) triggerReload(scene, 'mg'); // 只填裝彈弓
+        if (mgAmmo <= 0) triggerReload(scene, 'mg'); 
     }
 }
 
@@ -774,8 +651,9 @@ function fireSG(scene, pointer, autoAim) {
             bullet.setCollideWorldBounds(true).setBounce(0.9); bullet.body.onWorldBounds = true;
         }
     }
-    sgAmmo -= 5; if (sgAmmo < 0) sgAmmo = 0; sgText.setText(`Shotgun: ${sgAmmo}/${sgMaxAmmo}`);
-    if (sgAmmo <= 0) triggerReload(scene, 'sg'); // 只填裝霰彈槍
+    // 修正：霰彈槍消耗應為 1，而非 5
+    sgAmmo -= 1; if (sgAmmo < 0) sgAmmo = 0; sgText.setText(`Shotgun: ${sgAmmo}/${sgMaxAmmo}`);
+    if (sgAmmo <= 0) triggerReload(scene, 'sg'); 
 }
 
 function fireSN(scene, pointer, autoAim) {
@@ -784,279 +662,118 @@ function fireSN(scene, pointer, autoAim) {
     if (bullet) {
         bullet.setScale(0.1, 0.025).setRotation(angle).setVelocity(Math.cos(angle) * 1500, Math.sin(angle) * 1500).body.allowGravity = false;
         bullet.setCollideWorldBounds(true); bullet.body.onWorldBounds = true; snAmmo--; snText.setText(`Sniper: ${snAmmo}/${snMaxAmmo}`);
-        if (snAmmo <= 0) triggerReload(scene, 'sn'); // 只填裝狙擊槍
+        if (snAmmo <= 0) triggerReload(scene, 'sn'); 
     }
 }
 
-/**
- * 隨機天降雷射攻擊
- * @param {Phaser.Scene} scene - Phaser 場景實例
- */
 function spawnLaser(scene) {
     if (!loli.active) return;
-
-    // 狂暴模式固定 1 個雷射，一般模式隨機 1 到 3 個
     const laserCount = loli.isBerserk ? 1 : Phaser.Math.Between(1, 3); 
     const height = scene.cameras.main.height;
-    const width = scene.cameras.main.width;
-    
-    // 狂暴模式下預警時間約 0.5s，一般模式約 1s (修改)
-    const warningDuration = loli.isBerserk ? 85 : 167; // 配合 yoyo 和 repeat: 5 (共 6 段)
-
+    const warningDuration = loli.isBerserk ? 85 : 167; 
     for (let i = 0; i < laserCount; i++) {
-        const randomX = Phaser.Math.Between(50, 1230); // 隨機 X 位置
-
-        // 預警階段：閃爍的紅線 (縱向)
+        const randomX = Phaser.Math.Between(50, 1230);
         const warningLineV = scene.add.rectangle(randomX, height / 2, 2, height, 0xff0000, 0.5);
-        
-        // 快速閃爍效果 (縱向)
         scene.tweens.add({
-            targets: warningLineV,
-            alpha: 0,
-            duration: warningDuration,
-            yoyo: true,
-            repeat: 5, 
+            targets: warningLineV, alpha: 0, duration: warningDuration, yoyo: true, repeat: 5, 
             onComplete: () => {
-                warningLineV.destroy(); // 移除預警線
-
-                // 攻擊階段：降下雷射 (寬 25px，使用要求的顏色 #ff00ff)
+                warningLineV.destroy();
                 const laserV = scene.add.rectangle(randomX, height / 2, 25, height, 0xff00ff);
                 scene.physics.add.existing(laserV);
                 lasers.add(laserV);
-
                 laserV.body.allowGravity = false;
                 laserV.body.setImmovable(true);
-
-                // 雷射攻擊持續 0.5 秒後消失
                 scene.time.delayedCall(500, () => {
                     laserV.destroy();
-                    
-                    // 狂暴模式：射完立刻提醒下一個雷射 (連鎖觸發)
-                    if (loli.isBerserk && i === laserCount - 1) {
-                        spawnLaser(scene);
-                    }
+                    if (loli.isBerserk && i === laserCount - 1) spawnLaser(scene);
                 });
             }
         });
     }
 }
 
-/**
- * 隨機投擲彈跳球攻擊
- * @param {Phaser.Scene} scene - Phaser 場景實例
- */
 function spawnEnemyBall(scene) {
     if (!loli.active) return;
-    
-    // 狂暴模式一次丟 5 顆，一般模式 1 顆
     const ballCount = loli.isBerserk ? 5 : 1;
-    
     for (let i = 0; i < ballCount; i++) {
-        // 從敵人的位置出發
-        const x = loli.x;
-        const y = loli.y;
-        
-        // 建立 ff00ff 的圓球 (半徑 15)
-        const ball = scene.add.circle(x, y, 15, 0xff00ff);
+        const ball = scene.add.circle(loli.x, loli.y, 15, 0xff00ff);
         scene.physics.add.existing(ball);
         enemyBalls.add(ball);
-        
-        // 隨機角度投擲 (0 到 360 度)
         const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
         const speed = 400;
-        
-        // 設定物理屬性
         ball.body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-        ball.body.setBounce(1, 1); // 完全彈跳
-        ball.body.setCollideWorldBounds(true);
-        ball.body.onWorldBounds = true; // 觸發事件以利碰到牆壁銷毀
+        ball.body.setBounce(1, 1); ball.body.setCollideWorldBounds(true); ball.body.onWorldBounds = true;
     }
 }
 
-/**
- * 建立衝刺塵埃效果
- * @param {Phaser.Scene} scene - Phaser 場景實例
- * @param {number} x - 塵埃產生的 X 座標
- * @param {number} y - 塵埃產生的 Y 座標
- * @param {number} dashAngle - 衝刺的角度 (弧度)
- */
 function createDashDust(scene, x, y, dashAngle) {
-    const dustCount = 32; // 增加塵埃數量 (從 12 增加到 32)
-    const oppositeAngle = dashAngle + Math.PI; // 塵埃噴向衝刺的反方向
-
+    const dustCount = 32; const oppositeAngle = dashAngle + Math.PI;
     for (let i = 0; i < dustCount; i++) {
-        // 隨機擴散角度、初速與粒子尺寸
-        const spread = Phaser.Math.FloatBetween(-0.6, 0.6); // 增加擴散範圍
-        const speed = Phaser.Math.Between(100, 600);       // 增加速度範圍
-        const size = Phaser.Math.Between(6, 12);           // 增加尺寸 (從 4-8 增加到 6-12)
-        
-        // 建立灰黑色塵埃粒子 (使用矩形模擬) (修改顏色)
+        const spread = Phaser.Math.FloatBetween(-0.6, 0.6); const speed = Phaser.Math.Between(100, 600); const size = Phaser.Math.Between(6, 12);
         const dust = scene.add.rectangle(x, y, size, size, 0x333333, 0.8);
         scene.physics.add.existing(dust);
-        
-        dust.body.allowGravity = false; // 塵埃不受重力影響
-        dust.body.setVelocity(
-            Math.cos(oppositeAngle + spread) * speed,
-            Math.sin(oppositeAngle + spread) * speed
-        );
-
-        // 隨機初始旋轉角度
+        dust.body.allowGravity = false;
+        dust.body.setVelocity(Math.cos(oppositeAngle + spread) * speed, Math.sin(oppositeAngle + spread) * speed);
         dust.setRotation(Phaser.Math.FloatBetween(0, Math.PI * 2));
-
-        // 漸變消失動畫
-        scene.tweens.add({
-            targets: dust,
-            alpha: 0,
-            scale: 0.2,
-            duration: Phaser.Math.Between(400, 800),
-            ease: 'Cubic.easeOut',
-            onComplete: () => {
-                dust.destroy(); // 動畫結束後銷毀粒子
-            }
-        });
+        scene.tweens.add({ targets: dust, alpha: 0, scale: 0.2, duration: Phaser.Math.Between(400, 800), ease: 'Cubic.easeOut', onComplete: () => { dust.destroy(); } });
     }
 }
 
-/**
- * 建立衝刺防護網效果 (新增)
- * @param {Phaser.Scene} scene - Phaser 場景實例
- * @param {Phaser.GameObjects.Sprite} player - 玩家實例
- * @param {number} angle - 衝刺的角度 (弧度)
- */
 function createDashShield(scene, player, angle) {
-    const shield = scene.add.graphics();
-    let hasHit = false; // 確保每次衝刺只會對蘿莉造成一次傷害
-    let alive = true; // 新增：控制護盾生命週期
-    
-    // 150ms 衝刺 + 1000ms 殘留 = 1150ms (新增)
-    scene.time.delayedCall(1150, () => {
-        alive = false;
-    });
-
-    // 使用 update 事件讓護盾跟隨玩家
+    const shield = scene.add.graphics(); let hasHit = false; let alive = true;
+    scene.time.delayedCall(1150, () => { alive = false; });
     const onUpdate = () => {
-        if (!alive || !player.active) { // 修改：改用 alive 判斷
-            shield.destroy();
-            scene.events.off('update', onUpdate);
-            return;
-        }
-
-        shield.clear();
-        shield.lineStyle(2, 0x00ffff, 0.6); // 使用 #00ffff 防護網顏色
-
-        // 調整護盾位置：向衝刺方向偏移，使其不碰到玩家 (新增偏移)
-        const offset = 35;
-        const centerX = player.x + Math.cos(angle) * offset;
-        const centerY = player.y + Math.sin(angle) * offset;
-
-        const radius = 65; // 稍微加大護盾半徑
-        const arcRange = Math.PI / 1.2; // 約 150 度
-        const startAngle = angle - arcRange / 2;
-        const endAngle = angle + arcRange / 2;
-
-        // 畫出網格感
-        // 1. 多重圓弧線
-        for (let r = 25; r <= radius; r += 20) {
-            shield.beginPath();
-            shield.arc(centerX, centerY, r, startAngle, endAngle);
-            shield.strokePath();
-        }
-
-        // 2. 放射狀網格線
+        if (!alive || !player.active) { shield.destroy(); scene.events.off('update', onUpdate); return; }
+        shield.clear(); shield.lineStyle(2, 0x00ffff, 0.6);
+        const offset = 35; const centerX = player.x + Math.cos(angle) * offset; const centerY = player.y + Math.sin(angle) * offset;
+        const radius = 65; const arcRange = Math.PI / 1.2; const startAngle = angle - arcRange / 2; const endAngle = angle + arcRange / 2;
+        for (let r = 25; r <= radius; r += 20) { shield.beginPath(); shield.arc(centerX, centerY, r, startAngle, endAngle); shield.strokePath(); }
         const segments = 6;
         for (let i = 0; i <= segments; i++) {
             const currentAngle = startAngle + (arcRange / segments) * i;
-            const x1 = centerX + Math.cos(currentAngle) * 15;
-            const y1 = centerY + Math.sin(currentAngle) * 15;
-            const x2 = centerX + Math.cos(currentAngle) * radius;
-            const y2 = centerY + Math.sin(currentAngle) * radius;
-            shield.lineBetween(x1, y1, x2, y2);
+            shield.lineBetween(centerX + Math.cos(currentAngle) * 15, centerY + Math.sin(currentAngle) * 15, centerX + Math.cos(currentAngle) * radius, centerY + Math.sin(currentAngle) * radius);
         }
-        
-        // 增加發光感
-        shield.lineStyle(1, 0x00ffff, 1);
-        shield.beginPath();
-        shield.arc(centerX, centerY, radius, startAngle, endAngle);
-        shield.strokePath();
-
-        // --- 碰撞偵測 (新增) ---
+        shield.lineStyle(1, 0x00ffff, 1); shield.beginPath(); shield.arc(centerX, centerY, radius, startAngle, endAngle); shield.strokePath();
         if (!hasHit && loli.active) {
             const dist = Phaser.Math.Distance.Between(centerX, centerY, loli.x, loli.y);
-            // 當蘿莉靠近護盾中心點且在護盾範圍內時觸發
             if (dist < radius + 40) {
-                // 模擬狙擊槍的擊退與傷害 (傷害 25)
                 const hitAngle = Phaser.Math.Angle.Between(player.x, player.y, loli.x, loli.y);
-                const force = 1500; // 狙擊槍強度的擊退
-                const stunTime = 500;
-                const damage = 25;
-
-                loliHP -= damage;
-                loliHPText.setText(`蘿莉血量: ${loliHP}`);
-                
-                loli.isHit = true;
-                loli.hitStunTimer = stunTime;
-                loli.setVelocity(Math.cos(hitAngle) * force, Math.sin(hitAngle) * force - 200);
-                loli.setTint(0xff0000);
-                scene.cameras.main.shake(100, 0.005);
-                
-                // 如果血量歸零，觸發全域死亡邏輯 (修正 Bug)
-                if (loliHP <= 0) {
-                    handleLoliDeath(scene, loli);
-                }
-
-                hasHit = true; // 標記已命中
+                loliHP -= 25; loliHPText.setText(`蘿莉血量: ${loliHP}`);
+                loli.isHit = true; loli.hitStunTimer = 500; loli.setVelocity(Math.cos(hitAngle) * 1500, Math.sin(hitAngle) * 1500 - 200); loli.setTint(0xff0000);
+                scene.cameras.main.shake(100, 0.005); if (loliHP <= 0) handleLoliDeath(scene, loli);
+                hasHit = true;
             }
         }
     };
-
     scene.events.on('update', onUpdate);
 }
 
-/**
- * 處理蘿莉死亡與重生邏輯 (新增)
- * @param {Phaser.Scene} scene 
- * @param {Phaser.GameObjects.Sprite} target 
- */
 function handleLoliDeath(scene, target) {
     target.setActive(false).setVisible(false).body.enable = false;
     scene.cameras.main.flash(500, 255, 0, 0);
-
-    // 羅莉死後立刻清除羅莉發出的所有攻擊
-    if (shockwaves) shockwaves.clear(true, true);
-    if (lasers) lasers.clear(true, true);
-    if (enemyBalls) enemyBalls.clear(true, true);
-
+    if (shockwaves) shockwaves.clear(true, true); if (lasers) lasers.clear(true, true); if (enemyBalls) enemyBalls.clear(true, true);
     scene.time.delayedCall(3000, () => {
-        loliHP = loliMaxHP; 
-        loliHPText.setText(`蘿莉血量: ${loliHP}`);
+        loliHP = loliMaxHP; loliHPText.setText(`蘿莉血量: ${loliHP}`);
         target.setActive(true).setVisible(true).body.enable = true;
         target.setPosition(scene.cameras.main.width / 4, scene.cameras.main.height - 150);
-        
-        // 復活後取消狂暴模式並清除相關場景物件
         target.isBerserk = false;
         if (scene.berserkBg) { scene.berserkBg.destroy(); scene.berserkBg = null; }
         if (scene.berserkCeiling) { scene.berserkCeiling.destroy(); scene.berserkCeiling = null; }
         if (scene.berserkFloor) { scene.berserkFloor.destroy(); scene.berserkFloor = null; }
         if (scene.berserkGunLeft) { scene.berserkGunLeft.destroy(); scene.berserkGunLeft = null; }
         if (scene.berserkGunRight) { scene.berserkGunRight.destroy(); scene.berserkGunRight = null; }
-
-        target.body.allowGravity = true; // 恢復重力
-        target.clearTint();              // 清除受擊顏色
-        scheduleNextLaser(scene);        // 重啟一般模式雷射計時器
+        target.body.allowGravity = true; target.clearTint();
+        scheduleNextLaser(scene); 
     });
 }
 
-/**
- * 設定隨機雷射計時器 (原本在 create 內，改為全域)
- * @param {Phaser.Scene} scene 
- */
 function scheduleNextLaser(scene) {
-    // 如果進入狂暴模式，雷射邏輯會轉由 spawnLaser 內部連鎖觸發
-    if (loli.isBerserk) return; 
-
+    if (loli.isBerserk || !loli.active) return; 
     const delay = Phaser.Math.Between(3000, 7000);
     scene.time.delayedCall(delay, () => {
-        spawnLaser(scene);
-        scheduleNextLaser(scene);
+        if (loli.active && !loli.isBerserk) {
+            spawnLaser(scene);
+            scheduleNextLaser(scene);
+        }
     });
 }
