@@ -1,6 +1,7 @@
 // === 遊戲主場景模組 ===
 // 包含所有遊戲邏輯（後續步驟將逐步拆分至獨立模組）
 import { mobileInput, isActuallyMobile, forceControls, detectMobile, setupMobileControls, repositionMobileControls } from '../ui/MobileControls.js';
+import { showCrashScreen } from '../ui/CrashScreen.js';
 
 let player; 
 let loli; 
@@ -161,54 +162,11 @@ function createScene() {
     });
 
     // 當機畫面 (處理玩家死亡/受傷)
-    let isCrashed = false; // 新增：防止多次觸發當機
+    let isCrashed = false; // 防止多次觸發當機
     const triggerCrash = () => {
-        if (isInvincible || isCrashed) return; // 衝刺/護盾期間無敵，或已當機則跳過 (修改)
+        if (isInvincible || isCrashed) return; // 衝刺/護盾期間無敵，或已當機則跳過
         isCrashed = true;
-
-        this.physics.pause();
-        this.scene.pause();
-        const crashScreen = document.createElement('div');
-        crashScreen.className = 'bsod-container'; // 使用 CSS class
-        crashScreen.innerHTML = `
-            <div class="bsod-content">
-                <div class="bsod-smiley">:(</div>
-                <h1 class="bsod-message">不明錯誤，我們將盡力幫您修復，若無法修復請上: <a href="https://alfaxlee.github.io/problemsolving/">https://alfaxlee.github.io/problemsolving/</a></h1>
-                <div class="bsod-progress">修復中<span class="progress-percent">0</span>% 完成</div>
-                <div class="bsod-footer">
-                    <img src="./assets/images/qr%20code.png" class="bsod-qr">
-                    <div class="bsod-details">
-                        <p>搜尋此錯誤:</p>
-                        <p class="bsod-error-code">CRITICAL_PROCESS_DIED_BY_LOLI</p>
-                    </div>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(crashScreen);
-        
-        // 使用局部選擇器，避免多個當機畫面時的 ID 衝突 (修改)
-        const progressPercent = crashScreen.querySelector('.progress-percent');
-        const progressRow = crashScreen.querySelector('.bsod-progress');
-        
-        let percent = 0;
-        const startTime = Date.now();
-        const updatePercent = () => {
-            percent = Math.min(Math.floor(((Date.now() - startTime) / 5000) * 100), 100);
-            
-            if (progressPercent) progressPercent.innerText = percent;
-
-            if (percent < 100) {
-                requestAnimationFrame(updatePercent);
-            } else {
-                // 當修復到 100% 時，背景切換為彩色電視，並將文字改為「錯誤」
-                crashScreen.classList.add('tv-background'); 
-                if (progressRow) {
-                    progressRow.innerText = '錯誤';
-                    progressRow.style.color = 'black'; // 背景變彩色後，黑色文字可能更清楚
-                }
-            }
-        };
-        requestAnimationFrame(updatePercent);
+        showCrashScreen(this); // 委派給 CrashScreen 模組處理 DOM 與動畫
     };
     this.triggerCrash = triggerCrash; // 將當機函式掛載到場景，供外部雷射函式使用 (新增)
 
