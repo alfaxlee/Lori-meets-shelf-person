@@ -1,5 +1,6 @@
 // === 遊戲主場景模組 ===
 // 包含所有遊戲邏輯（後續步驟將逐步拆分至獨立模組）
+import { mobileInput, isActuallyMobile, forceControls, detectMobile, setupMobileControls, repositionMobileControls } from '../ui/MobileControls.js';
 
 let player; 
 let loli; 
@@ -73,12 +74,7 @@ function keepSpriteBottom(sprite, bottom) {
     sprite.y += bottom - sprite.getBounds().bottom;
 }
 
-// --- 控制變數 ---
-let isActuallyMobile = false; // 真實手機偵測
-let forceControls = false;    // 關閉強制顯示，確保非手機不顯示 (修改)
-let mobileInput = { left: false, right: false, up: false, fireMg: false, fireSg: false, fireSn: false, reload: false, dash: false };
-let joystickBase;
-let joystickThumb;
+// --- 控制變數 --- (已搬移至 ui/MobileControls.js)
 
 // 載入遊戲素材（由 GameScene.preload 委派呼叫）
 function preloadAssets() {
@@ -97,8 +93,8 @@ function createScene() {
     // 啟用多點觸控 (最多支援 5 點同時操作)
     this.input.addPointer(5);
 
-    // 更好的手機偵測方式：結合 UserAgent 與觸控支援
-    isActuallyMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || !this.sys.game.device.os.desktop;
+    // 偵測手機裝置（邏輯已搬至 MobileControls 模組）
+    detectMobile(this);
 
     this.input.mouse.disableContextMenu();
     this.physics.world.setBounds(0, 0, width, height);
@@ -304,63 +300,7 @@ function createScene() {
     });
 }
 
-function setupMobileControls(scene) {
-    const height = scene.cameras.main.height;
-    const width = scene.cameras.main.width;
-    // 修正：初始位置改為 120, height - 120 以符合 reposition 邏輯
-    joystickBase = scene.add.circle(120, height - 120, 133, 0x888888, 0.5).setScrollFactor(0).setDepth(1000);
-    joystickThumb = scene.add.circle(120, height - 120, 67, 0xcccccc, 0.8).setScrollFactor(0).setDepth(1001).setInteractive();
-    scene.input.setDraggable(joystickThumb);
-    scene.input.on('drag', (pointer, gameObject, dragX, dragY) => {
-        if (gameObject === joystickThumb) {
-            const dx = dragX - joystickBase.x; 
-            const dy = dragY - joystickBase.y;
-            const dist = Math.min(Math.sqrt(dx * dx + dy * dy), 66);
-            const angle = Math.atan2(dy, dx);
-            
-            gameObject.x = joystickBase.x + Math.cos(angle) * dist;
-            gameObject.y = joystickBase.y + Math.sin(angle) * dist;
-            
-            mobileInput.left = (dx < -40); 
-            mobileInput.right = (dx > 40); 
-            mobileInput.up = (dy < -40);
-        }
-    });
-    scene.input.on('dragend', () => {
-        joystickThumb.x = joystickBase.x; joystickThumb.y = joystickBase.y;
-        mobileInput.left = mobileInput.right = mobileInput.up = false;
-    });
-    
-    const rx = width - 150; const ry = height - 150;
-    createBtn(scene, rx, ry - 240, 'MG', 0xffff00, 'fireMg');
-    createBtn(scene, rx - 200, ry - 170, 'SG', 0x00ff00, 'fireSg');
-    createBtn(scene, rx - 240, ry, 'SN', 0x00ffff, 'fireSn');
-    createBtn(scene, rx, ry, 'RE', 0xff00ff, 'reload');
-    createBtn(scene, rx - 440, ry, 'DASH', 0x00ffff, 'dash'); 
-}
-
-function createBtn(scene, x, y, label, color, key) {
-    const b = scene.add.circle(x, y, 93, color, 0.6).setScrollFactor(0).setDepth(1000).setInteractive();
-    const t = scene.add.text(x, y, label, { fontSize: '27px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(1001);
-    
-    b.on('pointerdown', (pointer) => { mobileInput[key] = true; b.setAlpha(0.9); });
-    b.on('pointerup', (pointer) => { mobileInput[key] = false; b.setAlpha(0.6); });
-    b.on('pointerout', (pointer) => { mobileInput[key] = false; b.setAlpha(0.6); });
-    
-    if (!scene.mobileButtons) scene.mobileButtons = [];
-    scene.mobileButtons.push({ btn: b, txt: t, originalOffsetX: scene.cameras.main.width - x, originalOffsetY: scene.cameras.main.height - y });
-}
-
-function repositionMobileControls(scene) {
-    const width = scene.cameras.main.width; const height = scene.cameras.main.height;
-    if (joystickBase) { joystickBase.setPosition(120, height - 120); joystickThumb.setPosition(120, height - 120); }
-    if (scene.mobileButtons) {
-        scene.mobileButtons.forEach(item => {
-            item.btn.setPosition(width - item.originalOffsetX, height - item.originalOffsetY);
-            item.txt.setPosition(width - item.originalOffsetX, height - item.originalOffsetY);
-        });
-    }
-}
+// setupMobileControls / createBtn / repositionMobileControls 已搬移至 ui/MobileControls.js
 
 // 每幀更新邏輯（由 GameScene.update 委派呼叫）
 function updateScene(time, delta) {
