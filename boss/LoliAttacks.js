@@ -2,6 +2,8 @@
 // 負責所有蘿莉的攻擊邏輯（衝擊波、雷射、彈跳球、究極模式攻擊）
 // 以及 Body 工具函式和場景清理函式
 
+import { bossState } from './LoliStateMachine.js';
+
 // --- 共享參考 ---
 // 透過 initAttackRefs() 在 create 階段注入，避免循環引用
 let refs = {};
@@ -60,9 +62,9 @@ export function createShockwaves(scene, x, y, fallHeight) {
 /** 產生垂直雷射攻擊 */
 export function spawnLaser(scene) {
     if (!refs.loli.active) return;
-    const laserCount = refs.loli.isBerserk ? 1 : Phaser.Math.Between(1, 3); 
+    const laserCount = bossState.isBerserk ? 1 : Phaser.Math.Between(1, 3); 
     const height = scene.cameras.main.height;
-    const warningDuration = refs.loli.isBerserk ? 85 : 167; 
+    const warningDuration = bossState.isBerserk ? 85 : 167; 
     for (let i = 0; i < laserCount; i++) {
         const randomX = Phaser.Math.Between(50, 1230);
         const warningLineV = scene.add.rectangle(randomX, height / 2, 2, height, 0xff0000, 0.5);
@@ -70,7 +72,7 @@ export function spawnLaser(scene) {
         scene.tweens.add({
             targets: warningLineV, alpha: 0, duration: warningDuration, yoyo: true, repeat: 5, 
             onComplete: () => {
-                if (refs.loli.isSuperInvincible) { if (warningLineV) warningLineV.destroy(); return; }
+                if (bossState.isSuperInvincible) { if (warningLineV) warningLineV.destroy(); return; }
                 warningLineV.destroy();
                 const laserV = scene.add.rectangle(randomX, height / 2, 25, height, 0xff00ff);
                 scene.physics.add.existing(laserV);
@@ -79,7 +81,7 @@ export function spawnLaser(scene) {
                 laserV.body.setImmovable(true);
                 scene.time.delayedCall(500, () => {
                     laserV.destroy();
-                    if (refs.loli.isBerserk && i === laserCount - 1 && !refs.loli.isSuperInvincible) spawnLaser(scene);
+                    if (bossState.isBerserk && i === laserCount - 1 && !bossState.isSuperInvincible) spawnLaser(scene);
                 });
             }
         });
@@ -103,10 +105,10 @@ export function spawnEnemyBall(scene) {
 
 /** 排程一般模式的隨機雷射 */
 export function scheduleNextLaser(scene) {
-    if (refs.loli.isBerserk || !refs.loli.active || refs.loli.isSuperInvincible) return;
+    if (bossState.isBerserk || !refs.loli.active || bossState.isSuperInvincible) return;
     const delay = Phaser.Math.Between(3000, 7000);
     scene.time.delayedCall(delay, () => {
-        if (refs.loli.active && !refs.loli.isBerserk && !refs.loli.isSuperInvincible) {
+        if (refs.loli.active && !bossState.isBerserk && !bossState.isSuperInvincible) {
             spawnLaser(scene);
             scheduleNextLaser(scene);
         }
@@ -117,7 +119,7 @@ export function scheduleNextLaser(scene) {
 
 /** 究極模式：左右雷射槍掃射 */
 export function scheduleUltimateGunAttack(scene) {
-    if (!refs.loli.active || !refs.loli.isUltimateBerserk) return;
+    if (!refs.loli.active || !bossState.isUltimateBerserk) return;
     const fireGun = (gun, isLeft) => {
         const startAngle = Phaser.Math.Between(-45, 45);
         const endAngle = startAngle + Phaser.Math.Between(-90, 90);
@@ -132,7 +134,7 @@ export function scheduleUltimateGunAttack(scene) {
         warningLine.setAngle(startAngle);
         scene.time.delayedCall(500, () => {
             if (warningLine) warningLine.destroy(); 
-            if (!refs.loli.active || !refs.loli.isUltimateBerserk) return;
+            if (!refs.loli.active || !bossState.isUltimateBerserk) return;
             const laser = scene.add.rectangle(worldX, worldY, 1500, 25, 0xff00ff, 0.8).setOrigin(laserOrigin, 0.5);
             laser.setAngle(gun.angle); 
             scene.physics.add.existing(laser);
@@ -152,14 +154,14 @@ export function scheduleUltimateGunAttack(scene) {
 
 /** 究極模式：持續產生彈跳球 */
 export function scheduleUltimateBalls(scene) {
-    if (!refs.loli.active || !refs.loli.isUltimateBerserk) return;
+    if (!refs.loli.active || !bossState.isUltimateBerserk) return;
     spawnEnemyBall(scene); 
     scene.time.delayedCall(1000, () => scheduleUltimateBalls(scene));
 }
 
 /** 究極模式：隨機角度雷射 */
 export function spawnUltimateLaser(scene) {
-    if (!refs.loli.active || !refs.loli.isUltimateBerserk) return;
+    if (!refs.loli.active || !bossState.isUltimateBerserk) return;
     const laserCount = Phaser.Math.Between(3, 5); 
     const width = scene.cameras.main.width;
     const height = scene.cameras.main.height;
@@ -174,7 +176,7 @@ export function spawnUltimateLaser(scene) {
             targets: warningLine, alpha: 0, duration: 100, yoyo: true, repeat: 5, 
             onComplete: () => {
                 if (warningLine) warningLine.destroy();
-                if (!refs.loli.active || !refs.loli.isUltimateBerserk) return;
+                if (!refs.loli.active || !bossState.isUltimateBerserk) return;
                 const laser = scene.add.rectangle(randomX, randomY, 3000, 25, 0xff00ff);
                 laser.setAngle(randomAngle);
                 scene.physics.add.existing(laser);
