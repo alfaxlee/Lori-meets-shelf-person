@@ -4,6 +4,9 @@ import { mobileInput, isActuallyMobile, forceControls, detectMobile, setupMobile
 import { showCrashScreen } from '../ui/CrashScreen.js';
 import { createHUD, updateLoliHP, drawEnergyBar, getEnergyBar } from '../ui/HUD.js';
 import { createWeaponUI, getWeaponState, triggerReload, fireMG, fireSG, fireSN } from '../weapons/WeaponManager.js';
+import { createDashDust } from '../player/DashEffects.js';
+import { playerState, updatePlayer } from '../player/PlayerController.js';
+import { initAttackRefs, rememberLoliBody, setLoliUprightBody, setLoliExhaustedBody, keepSpriteBottom, createShockwaves, spawnLaser, spawnEnemyBall, scheduleNextLaser, scheduleUltimateGunAttack, scheduleUltimateBalls, spawnUltimateLaser, clearAllAttacks, cleanupBerserkScene } from '../boss/LoliAttacks.js';
 
 let player; 
 let loli; 
@@ -19,41 +22,14 @@ let shockwaves; // 衝擊波群組
 let lasers;    // 雷射攻擊群組
 let enemyBalls; // 敵人彈跳球群組
 
-// --- 衝刺系統變數 (新增) ---
-let dashEnergy = 100;
-let maxDashEnergy = 100;
-let dashCost = 33; // 減少衝刺消耗，在不回復的情況下可衝刺三次 (修改)
-let energyRegen = 0.5;
-let isDashing = false;
-let isInvincible = false; // 新增：衝刺無敵狀態
-// energyBar 已搬移至 ui/HUD.js
-let dashEnergyColor = 0x00ffff; // 衝刺能量條顏色
+// 衝刺系統變數已搬移至 player/PlayerController.js
 
 // --- 蘿莉遇櫃人 血量與狀態變數 ---
 let loliHP = 600;
 let loliMaxHP = 600;
 // loliHPText 已搬移至 ui/HUD.js
 
-function rememberLoliBody(sprite) {
-    sprite.baseBodySize = {
-        width: sprite.body.sourceWidth,
-        height: sprite.body.sourceHeight
-    };
-}
-
-function setLoliUprightBody(sprite) {
-    if (!sprite.baseBodySize) return;
-    sprite.setSize(sprite.baseBodySize.width, sprite.baseBodySize.height, true);
-}
-
-function setLoliExhaustedBody(sprite) {
-    if (!sprite.baseBodySize) return;
-    sprite.setSize(sprite.baseBodySize.height, sprite.baseBodySize.width, true);
-}
-
-function keepSpriteBottom(sprite, bottom) {
-    sprite.y += bottom - sprite.getBounds().bottom;
-}
+// Body 工具函式已搬移至 boss/LoliAttacks.js
 
 // --- 控制變數 --- (已搬移至 ui/MobileControls.js)
 
@@ -110,6 +86,9 @@ function createScene() {
     loli.isSuperInvincible = false; // 新增：無敵模式標記
     rememberLoliBody(loli);
 
+    // 初始化攻擊模組的共享參考（注入 loli 和攻擊群組）
+    initAttackRefs({ loli, shockwaves, lasers, enemyBalls });
+
     this.physics.add.collider(player, platforms);
     this.physics.add.collider(loli, platforms); 
     
@@ -144,7 +123,7 @@ function createScene() {
     // 當機畫面 (處理玩家死亡/受傷)
     let isCrashed = false; // 防止多次觸發當機
     const triggerCrash = () => {
-        if (isInvincible || isCrashed) return; // 衝刺/護盾期間無敵，或已當機則跳過
+        if (playerState.isInvincible || isCrashed) return; // 衝刺/護盾期間無敵，或已當機則跳過
         isCrashed = true;
         showCrashScreen(this); // 委派給 CrashScreen 模組處理 DOM 與動畫
     };
@@ -239,70 +218,10 @@ function createScene() {
 // 每幀更新邏輯（由 GameScene.update 委派呼叫）
 function updateScene(time, delta) {
     // 繪製衝刺能量條（委派給 HUD 模組）
-    drawEnergyBar(dashEnergy, maxDashEnergy, dashEnergyColor);
+    drawEnergyBar(playerState.dashEnergy, playerState.maxDashEnergy, playerState.dashEnergyColor);
 
-    if (dashEnergy < maxDashEnergy) {
-        dashEnergy = Math.min(maxDashEnergy, dashEnergy + energyRegen);
-    }
-
-    const dashPressed = Phaser.Input.Keyboard.JustDown(this.keys.dash) || mobileInput.dash;
-    if (dashPressed) {
-        if (dashEnergy >= dashCost && !isDashing) {
-            dashEnergy -= dashCost;
-            isDashing = true;
-            isInvincible = true; 
-            player.setAlpha(0.5); 
-
-            let angle;
-            let speed = 2400; 
-            if (mobileInput.dash) {
-                angle = Phaser.Math.Angle.Between(loli.x, loli.y, player.x, player.y);
-            } else {
-                const mousePointer = this.input.activePointer;
-                angle = Phaser.Math.Angle.Between(player.x, player.y, mousePointer.x, mousePointer.y);
-                const dist = Phaser.Math.Distance.Between(player.x, player.y, mousePointer.x, mousePointer.y);
-                speed = Phaser.Math.Clamp(dist * 6, 1200, 3600); 
-            }
-            
-            player.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-            player.body.allowGravity = false; 
-
-            createDashDust(this, player.x, player.y, angle);
-            createDashShield(this, player, angle);
-
-            if (this.invincibilityTimer) this.invincibilityTimer.remove();
-
-            this.time.delayedCall(150, () => {
-                isDashing = false; 
-                player.body.allowGravity = true;
-                player.setAlpha(0.7); 
-                
-                this.invincibilityTimer = this.time.delayedCall(1000, () => {
-                    isInvincible = false;
-                    player.setAlpha(1);
-                });
-            });
-        } else if (dashEnergy < dashCost && !isDashing) {
-            this.tweens.add({
-                targets: getEnergyBar(),
-                x: '+=5',
-                duration: 50,
-                yoyo: true,
-                repeat: 3,
-                onStart: () => { dashEnergyColor = 0xff0000; }, 
-                onComplete: () => { getEnergyBar().x = 0; dashEnergyColor = 0x00ffff; } 
-            });
-        }
-        mobileInput.dash = false;
-    }
-
-    if (!isDashing) {
-        if (this.keys.left.isDown || mobileInput.left) player.setVelocityX(-400);
-        else if (this.keys.right.isDown || mobileInput.right) player.setVelocityX(400);
-        else player.setVelocityX(0);
-
-        if ((this.keys.up.isDown || mobileInput.up) && player.body.touching.down) player.setVelocityY(-550);
-    }
+    // 玩家移動與衝刺控制（委派給 PlayerController 模組）
+    updatePlayer(this, player, loli, createDashShield);
 
     const pointer = this.input.activePointer;
     const ws = getWeaponState(); // 取得武器狀態
@@ -504,10 +423,10 @@ function updateScene(time, delta) {
                                     ultimateLaser.destroy();
                                     
                                     // 射完 360 度雷射後，給予玩家超級 Buff
-                                    maxDashEnergy = 200; // 能量條變成兩倍長
-                                    dashEnergy = maxDashEnergy; // 立刻補滿能量
-                                    dashCost = 33 / 2; // 消耗變 1/2 (原本是 33)
-                                    energyRegen = 1.0; // 回復能量效率變兩倍 (原本是 0.5)
+                                    playerState.maxDashEnergy = 200; // 能量條變成兩倍長
+                                    playerState.dashEnergy = playerState.maxDashEnergy; // 立刻補滿能量
+                                    playerState.dashCost = 33 / 2; // 消耗變 1/2 (原本是 33)
+                                    playerState.energyRegen = 1.0; // 回復能量效率變兩倍 (原本是 0.5)
                                     player.setTint(0x00ffff); // 玩家獲得衝刺 buff 時外觀稍微變色
 
                                     // 啟動究極狂暴模式攻擊
@@ -530,10 +449,10 @@ function updateScene(time, delta) {
                                         
                                         // 取消玩家的衝刺 buff 與外觀
                                         player.clearTint();
-                                        maxDashEnergy = 100;
-                                        dashCost = 33;
-                                        energyRegen = 0.5;
-                                        if (dashEnergy > maxDashEnergy) dashEnergy = maxDashEnergy;
+                                        playerState.maxDashEnergy = 100;
+                                        playerState.dashCost = 33;
+                                        playerState.energyRegen = 0.5;
+                                        if (playerState.dashEnergy > playerState.maxDashEnergy) playerState.dashEnergy = playerState.maxDashEnergy;
                                         
                                         // 移除狂暴模式的背景、天空、地板、兩把雷射槍
                                         if (loli.scene.berserkBg) { loli.scene.berserkBg.destroy(); loli.scene.berserkBg = null; }
@@ -627,86 +546,8 @@ function updateScene(time, delta) {
     }
 }
 
-function createShockwaves(scene, x, y, fallHeight) {
-    const scaleFactor = Math.min(2.5, 0.5 + (fallHeight / 200));
-    const directions = [-1, 1];
-    const angleRad = Phaser.Math.DegToRad(25); 
-    directions.forEach(dir => {
-        const sw = scene.add.rectangle(x, y - 20, 80 * scaleFactor, 40 * scaleFactor, 0xffffff, 0.8);
-        scene.physics.add.existing(sw);
-        shockwaves.add(sw);
-        sw.body.allowGravity = false;
-        const speed = 400 + (fallHeight * 0.6);
-        sw.body.setVelocity(dir * speed * Math.cos(angleRad), -speed * Math.sin(angleRad));
-        const rotation = dir === 1 ? -angleRad : angleRad;
-        sw.setRotation(rotation);
-        scene.tweens.add({
-            targets: sw, alpha: 0, scaleX: 1.5, scaleY: 1.5, duration: 500 + (fallHeight * 0.5),
-            onComplete: () => { sw.destroy(); }
-        });
-    });
-}
+// createShockwaves / spawnLaser / spawnEnemyBall / createDashDust 已搬移至 boss/LoliAttacks.js 和 player/DashEffects.js
 
-// triggerReload / fireMG / fireSG / fireSN 已搬移至 weapons/WeaponManager.js
-
-
-function spawnLaser(scene) {
-    if (!loli.active) return;
-    const laserCount = loli.isBerserk ? 1 : Phaser.Math.Between(1, 3); 
-    const height = scene.cameras.main.height;
-    const warningDuration = loli.isBerserk ? 85 : 167; 
-    for (let i = 0; i < laserCount; i++) {
-        const randomX = Phaser.Math.Between(50, 1230);
-        const warningLineV = scene.add.rectangle(randomX, height / 2, 2, height, 0xff0000, 0.5);
-        warningLineV.name = 'warningLine'; // 標記警告線
-        scene.tweens.add({
-            targets: warningLineV, alpha: 0, duration: warningDuration, yoyo: true, repeat: 5, 
-            onComplete: () => {
-                if (loli.isSuperInvincible) {
-                    if (warningLineV) warningLineV.destroy();
-                    return; // 無敵模式下取消發射
-                }
-                warningLineV.destroy();
-                const laserV = scene.add.rectangle(randomX, height / 2, 25, height, 0xff00ff);
-                scene.physics.add.existing(laserV);
-                lasers.add(laserV);
-                laserV.body.allowGravity = false;
-                laserV.body.setImmovable(true);
-                scene.time.delayedCall(500, () => {
-                    laserV.destroy();
-                    if (loli.isBerserk && i === laserCount - 1 && !loli.isSuperInvincible) spawnLaser(scene);
-                });
-            }
-        });
-    }
-}
-
-function spawnEnemyBall(scene) {
-    if (!loli.active) return;
-    const ballCount = loli.isBerserk ? 5 : 1;
-    for (let i = 0; i < ballCount; i++) {
-        const ball = scene.add.circle(loli.x, loli.y, 15, 0xff00ff);
-        scene.physics.add.existing(ball);
-        enemyBalls.add(ball);
-        const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
-        const speed = 400;
-        ball.body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-        ball.body.setBounce(1, 1); ball.body.setCollideWorldBounds(true); ball.body.onWorldBounds = true;
-    }
-}
-
-function createDashDust(scene, x, y, dashAngle) {
-    const dustCount = 32; const oppositeAngle = dashAngle + Math.PI;
-    for (let i = 0; i < dustCount; i++) {
-        const spread = Phaser.Math.FloatBetween(-0.6, 0.6); const speed = Phaser.Math.Between(100, 600); const size = Phaser.Math.Between(6, 12);
-        const dust = scene.add.rectangle(x, y, size, size, 0x333333, 0.8);
-        scene.physics.add.existing(dust);
-        dust.body.allowGravity = false;
-        dust.body.setVelocity(Math.cos(oppositeAngle + spread) * speed, Math.sin(oppositeAngle + spread) * speed);
-        dust.setRotation(Phaser.Math.FloatBetween(0, Math.PI * 2));
-        scene.tweens.add({ targets: dust, alpha: 0, scale: 0.2, duration: Phaser.Math.Between(400, 800), ease: 'Cubic.easeOut', onComplete: () => { dust.destroy(); } });
-    }
-}
 
 function createDashShield(scene, player, angle) {
     const shield = scene.add.graphics(); let hasHit = false; let alive = true;
@@ -772,26 +613,14 @@ function handleLoliDeath(scene, target) {
         target.setScale(0.3); // 重置為原本的體型
         setLoliUprightBody(target);
         target.body.setImmovable(false); // 重置為可被擊退的狀態
-        if (scene.berserkBg) { scene.berserkBg.destroy(); scene.berserkBg = null; }
-        if (scene.berserkCeiling) { scene.berserkCeiling.destroy(); scene.berserkCeiling = null; }
-        if (scene.berserkFloor) { scene.berserkFloor.destroy(); scene.berserkFloor = null; }
-        if (scene.berserkGunLeft) { scene.berserkGunLeft.destroy(); scene.berserkGunLeft = null; }
-        if (scene.berserkGunRight) { scene.berserkGunRight.destroy(); scene.berserkGunRight = null; }
+        cleanupBerserkScene(scene);
         target.body.allowGravity = true; target.clearTint();
         scheduleNextLaser(scene); 
     });
 }
 
-function scheduleNextLaser(scene) {
-    if (loli.isBerserk || !loli.active || loli.isSuperInvincible) return; // 新增：無敵模式下不排程
-    const delay = Phaser.Math.Between(3000, 7000);
-    scene.time.delayedCall(delay, () => {
-        if (loli.active && !loli.isBerserk && !loli.isSuperInvincible) { // 新增：無敵模式下不觸發
-            spawnLaser(scene);
-            scheduleNextLaser(scene);
-        }
-    });
-}
+// scheduleNextLaser 已搬移至 boss/LoliAttacks.js
+
 
 // 觸發無敵模式並移動到畫面中間偏上
 function triggerInvincibleMode(scene, target) {
@@ -802,15 +631,8 @@ function triggerInvincibleMode(scene, target) {
     target.body.setImmovable(true); // 變成不動的物體 (就像空中的地板，玩家可以站上去，不會被物理擊退)
     target.isScaling = false; // 初始化放大標記
     
-    // 清除畫面上所有的攻擊與警告線
-    if (shockwaves) shockwaves.clear(true, true);
-    if (lasers) lasers.clear(true, true);
-    if (enemyBalls) enemyBalls.clear(true, true);
-    
-    // 找出所有名字是 warningLine 的物件並刪除
-    scene.children.list.forEach(child => {
-        if (child.name === 'warningLine') child.destroy();
-    });
+    // 清除畫面上所有的攻擊與警告線（委派給 LoliAttacks 模組）
+    clearAllAttacks(scene);
     
     // 最近路徑走到螢幕中心偏上 (高度 1/4 處，即距離底部 3/4)
     const centerX = scene.cameras.main.width / 2;
@@ -818,105 +640,7 @@ function triggerInvincibleMode(scene, target) {
     scene.physics.moveTo(target, centerX, centerY, 500); // 以速度 500 移動
 }
 
-// ========================== 究極狂暴模式攻擊 ==========================
-
-function scheduleUltimateGunAttack(scene) {
-    if (!loli.active || !loli.isUltimateBerserk) return;
-
-    const fireGun = (gun, isLeft) => {
-        const startAngle = Phaser.Math.Between(-45, 45);
-        const endAngle = startAngle + Phaser.Math.Between(-90, 90);
-        gun.setAngle(startAngle);
-
-        const rad = Phaser.Math.DegToRad(startAngle);
-        const offsetX = isLeft ? 260 : -260; 
-        const worldX = gun.x + Math.cos(rad) * offsetX;
-        const worldY = gun.y + Math.sin(rad) * offsetX;
-        const laserOrigin = isLeft ? 0 : 1;
-
-        const warningLine = scene.add.rectangle(worldX, worldY, 1500, 2, 0xff0000, 0.5).setOrigin(laserOrigin, 0.5);
-        warningLine.name = 'warningLine';
-        warningLine.setAngle(startAngle);
-
-        scene.time.delayedCall(500, () => {
-            if (warningLine) warningLine.destroy(); 
-            if (!loli.active || !loli.isUltimateBerserk) return;
-
-            const laser = scene.add.rectangle(worldX, worldY, 1500, 25, 0xff00ff, 0.8).setOrigin(laserOrigin, 0.5);
-            laser.setAngle(gun.angle); 
-            scene.physics.add.existing(laser);
-            lasers.add(laser);
-            if (laser.body) laser.body.enable = false;
-
-            scene.tweens.add({
-                targets: gun,
-                angle: endAngle,
-                duration: 1000,
-                ease: 'Linear',
-                onUpdate: () => {
-                    if (!laser.active) return;
-                    const curRad = Phaser.Math.DegToRad(gun.angle);
-                    laser.x = gun.x + Math.cos(curRad) * offsetX;
-                    laser.y = gun.y + Math.sin(curRad) * offsetX;
-                    laser.setAngle(gun.angle);
-                },
-                onComplete: () => {
-                    laser.destroy();
-                }
-            });
-        });
-    };
-
-    if (scene.berserkGunLeft) fireGun(scene.berserkGunLeft, true);
-    if (scene.berserkGunRight) fireGun(scene.berserkGunRight, false);
-
-    scene.time.delayedCall(2000, () => scheduleUltimateGunAttack(scene));
-}
-
-function scheduleUltimateBalls(scene) {
-    if (!loli.active || !loli.isUltimateBerserk) return;
-    spawnEnemyBall(scene); 
-    scene.time.delayedCall(1000, () => scheduleUltimateBalls(scene));
-}
-
-function spawnUltimateLaser(scene) {
-    if (!loli.active || !loli.isUltimateBerserk) return;
-
-    const laserCount = Phaser.Math.Between(3, 5); 
-    const width = scene.cameras.main.width;
-    const height = scene.cameras.main.height;
-
-    for (let i = 0; i < laserCount; i++) {
-        const randomX = Phaser.Math.Between(0, width);
-        const randomY = Phaser.Math.Between(0, height);
-        const randomAngle = Phaser.Math.Between(0, 360);
-        
-        const warningLine = scene.add.rectangle(randomX, randomY, 3000, 2, 0xff0000, 0.5);
-        warningLine.name = 'warningLine'; 
-        warningLine.setAngle(randomAngle);
-
-        scene.tweens.add({
-            targets: warningLine, alpha: 0, duration: 100, yoyo: true, repeat: 5, 
-            onComplete: () => {
-                if (warningLine) warningLine.destroy();
-                if (!loli.active || !loli.isUltimateBerserk) return;
-
-                const laser = scene.add.rectangle(randomX, randomY, 3000, 25, 0xff00ff);
-                laser.setAngle(randomAngle);
-                scene.physics.add.existing(laser);
-                lasers.add(laser);
-                laser.body.allowGravity = false;
-                laser.body.setImmovable(true);
-                
-                scene.time.delayedCall(500, () => {
-                    if (laser) laser.destroy();
-                });
-            }
-        });
-    }
-
-    scene.time.delayedCall(Phaser.Math.Between(1000, 2000), () => spawnUltimateLaser(scene));
-}
+// scheduleUltimateGunAttack / scheduleUltimateBalls / spawnUltimateLaser 已搬移至 boss/LoliAttacks.js
 
 // === 場景類別定義 ===
 // 使用 class-based scene 取代 function-based scene
