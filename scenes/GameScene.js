@@ -2,6 +2,8 @@
 // 包含所有遊戲邏輯（後續步驟將逐步拆分至獨立模組）
 import { mobileInput, isActuallyMobile, forceControls, detectMobile, setupMobileControls, repositionMobileControls } from '../ui/MobileControls.js';
 import { showCrashScreen } from '../ui/CrashScreen.js';
+import { createHUD, updateLoliHP, drawEnergyBar, getEnergyBar } from '../ui/HUD.js';
+import { createWeaponUI, getWeaponState, triggerReload, fireMG, fireSG, fireSN } from '../weapons/WeaponManager.js';
 
 let player; 
 let loli; 
@@ -12,29 +14,7 @@ let mgBullets;
 let sgBullets;
 let snBullets; 
 
-// --- 彈弓系統變數 ---
-let mgAmmo = 72; 
-let mgMaxAmmo = 72; 
-let mgIsReloading = false;
-let lastMgFired = 0;
-let mgFireRate = 100;
-let mgText;
-
-// --- 霰彈槍系統變數 ---
-let sgAmmo = 5;
-let sgMaxAmmo = 5;
-let sgIsReloading = false;
-let lastSgFired = 0;
-let sgFireRate = 500;
-let sgText;
-
-// --- 狙擊槍系統變數 ---
-let snAmmo = 5;
-let snMaxAmmo = 5;
-let snIsReloading = false;
-let lastSnFired = 0;
-let snFireRate = 1500; 
-let snText;
+// --- 武器系統變數 --- (已搬移至 weapons/WeaponManager.js)
 let shockwaves; // 衝擊波群組
 let lasers;    // 雷射攻擊群組
 let enemyBalls; // 敵人彈跳球群組
@@ -46,13 +26,13 @@ let dashCost = 33; // 減少衝刺消耗，在不回復的情況下可衝刺三�
 let energyRegen = 0.5;
 let isDashing = false;
 let isInvincible = false; // 新增：衝刺無敵狀態
-let energyBar;
-let dashEnergyColor = 0x00ffff; // 衝刺能量條顏色 (新增)
+// energyBar 已搬移至 ui/HUD.js
+let dashEnergyColor = 0x00ffff; // 衝刺能量條顏色
 
 // --- 蘿莉遇櫃人 血量與狀態變數 ---
 let loliHP = 600;
 let loliMaxHP = 600;
-let loliHPText;
+// loliHPText 已搬移至 ui/HUD.js
 
 function rememberLoliBody(sprite) {
     sprite.baseBodySize = {
@@ -203,14 +183,10 @@ function createScene() {
         setupMobileControls(this);
     }
 
-    // UI
-    mgText = this.add.text(20, 20, `Slingshot: ${mgAmmo}/${mgMaxAmmo}`, { fontSize: '20px', fill: '#ffff00', fontStyle: 'bold', stroke: '#000', strokeThickness: 3 });
-    sgText = this.add.text(width - 20, 20, `Shotgun: ${sgAmmo}/${sgMaxAmmo}`, { fontSize: '20px', fill: '#00ff00', fontStyle: 'bold', stroke: '#000', strokeThickness: 3 }).setOrigin(1, 0);
-    snText = this.add.text(width / 2, 20, `Sniper: ${snAmmo}/${snMaxAmmo}`, { fontSize: '20px', fill: '#00ffff', fontStyle: 'bold', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5, 0);
-    loliHPText = this.add.text(width / 2, 60, `蘿莉血量: ${loliHP}`, { fontSize: '30px', fill: '#ff0000', fontStyle: 'bold', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5, 0);
-
-    // 能量條 UI (新增)
-    energyBar = this.add.graphics();
+    // 武器 UI 建立（委派給 WeaponManager 模組）
+    createWeaponUI(this);
+    // HUD 介面建立（蘿莉血量文字 + 衝刺能量條）
+    createHUD(this, loliHP);
 
     this.physics.add.collider(loli, mgBullets, (obj1, obj2) => { handleLoliHit(this, obj1, obj2, 600, 200, 5); });
     this.physics.add.collider(loli, sgBullets, (obj1, obj2) => { handleLoliHit(this, obj1, obj2, 400, 150, 25); });
@@ -233,7 +209,7 @@ function createScene() {
             loliHP -= damage;
         }
         
-        loliHPText.setText(`蘿莉血量: ${loliHP}`);
+        updateLoliHP(loliHP);
         
         if (loliHP <= 0) {
             handleLoliDeath(scene, target);
@@ -262,12 +238,8 @@ function createScene() {
 
 // 每幀更新邏輯（由 GameScene.update 委派呼叫）
 function updateScene(time, delta) {
-    energyBar.clear();
-    energyBar.fillStyle(0x888888, 0.8);
-    const energyBarWidth = maxDashEnergy * 2; // 原本長度是 200，現在根據最大能量等比放大
-    energyBar.fillRect(20, 100, energyBarWidth, 20); 
-    energyBar.fillStyle(dashEnergyColor, 1); 
-    energyBar.fillRect(20, 100, energyBarWidth * (dashEnergy / maxDashEnergy), 20); 
+    // 繪製衝刺能量條（委派給 HUD 模組）
+    drawEnergyBar(dashEnergy, maxDashEnergy, dashEnergyColor);
 
     if (dashEnergy < maxDashEnergy) {
         dashEnergy = Math.min(maxDashEnergy, dashEnergy + energyRegen);
@@ -312,13 +284,13 @@ function updateScene(time, delta) {
             });
         } else if (dashEnergy < dashCost && !isDashing) {
             this.tweens.add({
-                targets: energyBar,
+                targets: getEnergyBar(),
                 x: '+=5',
                 duration: 50,
                 yoyo: true,
                 repeat: 3,
                 onStart: () => { dashEnergyColor = 0xff0000; }, 
-                onComplete: () => { energyBar.x = 0; dashEnergyColor = 0x00ffff; } 
+                onComplete: () => { getEnergyBar().x = 0; dashEnergyColor = 0x00ffff; } 
             });
         }
         mobileInput.dash = false;
@@ -333,21 +305,24 @@ function updateScene(time, delta) {
     }
 
     const pointer = this.input.activePointer;
+    const ws = getWeaponState(); // 取得武器狀態
     
-    // 修正：補上方法調用的括號 ()，解決語法調用錯誤
+    // 彈弓射擊
     const triggerMg = isActuallyMobile ? mobileInput.fireMg : (pointer.leftButtonDown() || mobileInput.fireMg);
-    if (triggerMg && !mgIsReloading && mgAmmo > 0) {
-        if (time > lastMgFired + mgFireRate) { fireMG(this, pointer, mobileInput.fireMg); lastMgFired = time; }
+    if (triggerMg && !ws.mg.reloading && ws.mg.ammo > 0) {
+        if (time > ws.mg.lastFired + ws.mg.fireRate) { fireMG(this, player, loli, mgBullets, pointer, mobileInput.fireMg); ws.mg.lastFired = time; }
     }
     
+    // 霸彈槍射擊
     const triggerSg = isActuallyMobile ? mobileInput.fireSg : (pointer.rightButtonDown() || mobileInput.fireSg);
-    if (triggerSg && !sgIsReloading && sgAmmo > 0 && time > lastSgFired + sgFireRate) {
-        fireSG(this, pointer, mobileInput.fireSg); lastSgFired = time;
+    if (triggerSg && !ws.sg.reloading && ws.sg.ammo > 0 && time > ws.sg.lastFired + ws.sg.fireRate) {
+        fireSG(this, player, loli, sgBullets, pointer, mobileInput.fireSg); ws.sg.lastFired = time;
     }
     
+    // 狙擊槍射擊
     const triggerSn = isActuallyMobile ? mobileInput.fireSn : (pointer.middleButtonDown() || mobileInput.fireSn);
-    if (triggerSn && !snIsReloading && snAmmo > 0 && time > lastSnFired + snFireRate) {
-        fireSN(this, pointer, mobileInput.fireSn); lastSnFired = time;
+    if (triggerSn && !ws.sn.reloading && ws.sn.ammo > 0 && time > ws.sn.lastFired + ws.sn.fireRate) {
+        fireSN(this, player, loli, snBullets, pointer, mobileInput.fireSn); ws.sn.lastFired = time;
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.reload) || mobileInput.reload) {
@@ -672,56 +647,8 @@ function createShockwaves(scene, x, y, fallHeight) {
     });
 }
 
-function triggerReload(scene, weaponType) {
-    if ((!weaponType || weaponType === 'mg') && mgAmmo < mgMaxAmmo && !mgIsReloading) {
-        mgIsReloading = true; mgText.setText('RELOADING...');
-        scene.time.delayedCall(3000, () => { mgAmmo = mgMaxAmmo; mgIsReloading = false; mgText.setText(`Slingshot: ${mgAmmo}/${mgMaxAmmo}`); });
-    }
-    if ((!weaponType || weaponType === 'sg') && sgAmmo < sgMaxAmmo && !sgIsReloading) {
-        sgIsReloading = true; sgText.setText('RELOADING...');
-        scene.time.delayedCall(1000, () => { sgAmmo = sgMaxAmmo; sgIsReloading = false; sgText.setText(`Shotgun: ${sgAmmo}/${sgMaxAmmo}`); });
-    }
-    if ((!weaponType || weaponType === 'sn') && snAmmo < snMaxAmmo && !snIsReloading) {
-        snIsReloading = true; snText.setText('RELOADING...');
-        scene.time.delayedCall(5000, () => { snAmmo = snMaxAmmo; snIsReloading = false; snText.setText(`Sniper: ${snAmmo}/${snMaxAmmo}`); });
-    }
-}
+// triggerReload / fireMG / fireSG / fireSN 已搬移至 weapons/WeaponManager.js
 
-function fireMG(scene, pointer, autoAim) {
-    let angle = autoAim ? Phaser.Math.Angle.Between(player.x, player.y, loli.x, loli.y) : Phaser.Math.Angle.Between(player.x, player.y, pointer.x, pointer.y);
-    const bullet = mgBullets.create(player.x + Math.cos(angle) * 40, player.y + Math.sin(angle) * 40, 'shabi');
-    if (bullet) {
-        bullet.setScale(0.05).setVelocity(Math.cos(angle) * 1200, Math.sin(angle) * 1200).setCollideWorldBounds(true).setBounce(1);
-        bullet.body.onWorldBounds = true; mgAmmo--; mgText.setText(`Slingshot: ${mgAmmo}/${mgMaxAmmo}`);
-        if (mgAmmo <= 0) triggerReload(scene, 'mg'); 
-    }
-}
-
-function fireSG(scene, pointer, autoAim) {
-    let centerAngle = autoAim ? Phaser.Math.Angle.Between(player.x, player.y, loli.x, loli.y) : Phaser.Math.Angle.Between(player.x, player.y, pointer.x, pointer.y);
-    const spread = Phaser.Math.DegToRad(18);
-    for (let i = -2; i <= 2; i++) {
-        const angle = centerAngle + (i * spread);
-        const bullet = sgBullets.create(player.x + Math.cos(angle) * 40, player.y + Math.sin(angle) * 40, 'shabi');
-        if (bullet) {
-            bullet.setScale(0.05).setVelocity(Math.cos(angle) * 700, Math.sin(angle) * 700).body.allowGravity = false;
-            bullet.setCollideWorldBounds(true).setBounce(0.9); bullet.body.onWorldBounds = true;
-        }
-    }
-    // 修正：霰彈槍消耗應為 1，而非 5
-    sgAmmo -= 1; if (sgAmmo < 0) sgAmmo = 0; sgText.setText(`Shotgun: ${sgAmmo}/${sgMaxAmmo}`);
-    if (sgAmmo <= 0) triggerReload(scene, 'sg'); 
-}
-
-function fireSN(scene, pointer, autoAim) {
-    let angle = autoAim ? Phaser.Math.Angle.Between(player.x, player.y, loli.x, loli.y) : Phaser.Math.Angle.Between(player.x, player.y, pointer.x, pointer.y);
-    const bullet = snBullets.create(player.x + Math.cos(angle) * 40, player.y + Math.sin(angle) * 40, 'shabi');
-    if (bullet) {
-        bullet.setScale(0.1, 0.025).setRotation(angle).setVelocity(Math.cos(angle) * 1500, Math.sin(angle) * 1500).body.allowGravity = false;
-        bullet.setCollideWorldBounds(true); bullet.body.onWorldBounds = true; snAmmo--; snText.setText(`Sniper: ${snAmmo}/${snMaxAmmo}`);
-        if (snAmmo <= 0) triggerReload(scene, 'sn'); 
-    }
-}
 
 function spawnLaser(scene) {
     if (!loli.active) return;
@@ -811,7 +738,7 @@ function createDashShield(scene, player, angle) {
                     loliHP -= 25; 
                 }
                 
-                loliHPText.setText(`蘿莉血量: ${loliHP}`);
+                updateLoliHP(loliHP);
                 
                 if (loliHP <= 0) {
                     handleLoliDeath(scene, loli);
@@ -833,7 +760,7 @@ function handleLoliDeath(scene, target) {
     scene.cameras.main.flash(500, 255, 0, 0);
     if (shockwaves) shockwaves.clear(true, true); if (lasers) lasers.clear(true, true); if (enemyBalls) enemyBalls.clear(true, true);
     scene.time.delayedCall(3000, () => {
-        loliHP = loliMaxHP; loliHPText.setText(`蘿莉血量: ${loliHP}`);
+        loliHP = loliMaxHP; updateLoliHP(loliHP);
         target.setActive(true).setVisible(true).body.enable = true;
         target.setPosition(scene.cameras.main.width / 4, scene.cameras.main.height - 150);
         target.isBerserk = false;
