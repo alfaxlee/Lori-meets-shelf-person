@@ -76,6 +76,27 @@ let loliHP = 600;
 let loliMaxHP = 600;
 let loliHPText;
 
+function rememberLoliBody(sprite) {
+    sprite.baseBodySize = {
+        width: sprite.body.sourceWidth,
+        height: sprite.body.sourceHeight
+    };
+}
+
+function setLoliUprightBody(sprite) {
+    if (!sprite.baseBodySize) return;
+    sprite.setSize(sprite.baseBodySize.width, sprite.baseBodySize.height, true);
+}
+
+function setLoliExhaustedBody(sprite) {
+    if (!sprite.baseBodySize) return;
+    sprite.setSize(sprite.baseBodySize.height, sprite.baseBodySize.width, true);
+}
+
+function keepSpriteBottom(sprite, bottom) {
+    sprite.y += bottom - sprite.getBounds().bottom;
+}
+
 // --- 控制變數 ---
 let isActuallyMobile = false; // 真實手機偵測
 let forceControls = false;    // 關閉強制顯示，確保非手機不顯示 (修改)
@@ -132,6 +153,7 @@ function create() {
     loli.highestY = 0;     // 追蹤在空中的最高點 (Y 越小越高)
     loli.isBerserk = false; // 狂暴模式標記
     loli.isSuperInvincible = false; // 新增：無敵模式標記
+    rememberLoliBody(loli);
 
     this.physics.add.collider(player, platforms);
     this.physics.add.collider(loli, platforms); 
@@ -652,6 +674,7 @@ function update(time, delta) {
                                         loli.body.allowGravity = true; // 恢復重力讓她掉到地上
                                         loli.body.setImmovable(false); // 恢復可被擊退的狀態
                                         loli.setScale(0.3); // 蘿莉體型變回剛開始的樣子
+                                        setLoliUprightBody(loli);
                                         
                                         // 取消玩家的衝刺 buff 與外觀
                                         player.clearTint();
@@ -682,7 +705,10 @@ function update(time, delta) {
                                             duration: 1000,
                                             ease: 'Cubic.easeOut',
                                             onComplete: () => {
+                                                const currentBottom = loli.getBounds().bottom;
                                                 loli.setAngle(90); // 倒在地上 (轉 90 度看起來像趴著)
+                                                setLoliExhaustedBody(loli);
+                                                keepSpriteBottom(loli, currentBottom);
                                                 loli.clearTint(); // 恢復正常顏色
                                                 
                                                 // 墜落地板產生一道咖啡色、無傷害的衝擊波
@@ -940,6 +966,7 @@ function handleLoliDeath(scene, target) {
         target.setAngle(0); // 確保角度歸正 (因為癱瘓時會倒下)
         target.isScaling = false; // 重置放大狀態
         target.setScale(0.3); // 重置為原本的體型
+        setLoliUprightBody(target);
         target.body.setImmovable(false); // 重置為可被擊退的狀態
         if (scene.berserkBg) { scene.berserkBg.destroy(); scene.berserkBg = null; }
         if (scene.berserkCeiling) { scene.berserkCeiling.destroy(); scene.berserkCeiling = null; }
