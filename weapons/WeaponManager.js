@@ -84,8 +84,8 @@ export function fireSG(scene, player, loli, bulletGroup, pointer, autoAim) {
             bullet.setCollideWorldBounds(true).setBounce(0.9); bullet.body.onWorldBounds = true;
         }
     }
-    // 霰彈槍消耗為 1
-    w.ammo -= 1; if (w.ammo < 0) w.ammo = 0; sgText.setText(`Shotgun: ${w.ammo}/${w.maxAmmo}`);
+    // 霰彈槍每次射擊消耗 5 顆子彈
+    w.ammo -= 5; if (w.ammo < 0) w.ammo = 0; sgText.setText(`Shotgun: ${w.ammo}/${w.maxAmmo}`);
     if (w.ammo <= 0) triggerReload(scene, 'sg');
 }
 
