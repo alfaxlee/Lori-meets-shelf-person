@@ -7,7 +7,7 @@ import { createWeaponUI, getWeaponState, triggerReload, fireMG, fireSG, fireSN }
 import { createDashDust } from '../player/DashEffects.js';
 import { playerState, updatePlayer } from '../player/PlayerController.js';
 import { initBossRefs, bossState, handleLoliHit, updateLoliStateMachine } from '../boss/LoliStateMachine.js';
-import { initAttackRefs, spawnEnemyBall, scheduleNextLaser } from '../boss/LoliAttacks.js';
+import { initAttackRefs, spawnEnemyBall, scheduleNextLaser, rememberLoliBody } from '../boss/LoliAttacks.js';
 
 let player; 
 let loli; 
@@ -79,6 +79,9 @@ function createScene() {
     loli.setBounce(0.1);
     loli.isHit = false;
     loli.hitStunTimer = 0;
+    // 呼叫 rememberLoliBody 記住原始碰撞箱大小，以便在癱瘓模式翻轉
+    rememberLoliBody(loli);
+
     // 初始化狀態機與攻擊模組的共享參考
     initAttackRefs({ loli, shockwaves, lasers, enemyBalls });
     initBossRefs({ loli, player, lasers, enemyBalls, shockwaves });

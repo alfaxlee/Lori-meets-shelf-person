@@ -20,7 +20,8 @@ export function initAttackRefs(gameRefs) {
 
 /** 記住蘿莉的原始碰撞體大小 */
 export function rememberLoliBody(sprite) {
-    sprite.baseBodySize = { width: sprite.body.sourceWidth, height: sprite.body.sourceHeight };
+    // 記住原始的未縮放寬高作為基礎碰撞箱大小，並加上中文註解
+    sprite.baseBodySize = { width: sprite.width, height: sprite.height };
 }
 
 /** 設定蘿莉為站立碰撞體 */
