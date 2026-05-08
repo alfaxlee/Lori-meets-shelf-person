@@ -53,20 +53,20 @@ export function handleLoliDeath(scene) {
         updateLoliHP(bossState.hp);
         refs.loli.setActive(true).setVisible(true).body.enable = true;
         refs.loli.setPosition(scene.cameras.main.width / 4, scene.cameras.main.height - 150);
-        
+
         bossState.isBerserk = false;
         bossState.isSuperInvincible = false;
         bossState.isUltimateBerserk = false;
         bossState.isExhausted = false;
         bossState.isScaling = false;
-        
+
         refs.loli.setAngle(0);
         refs.loli.setScale(0.3);
         setLoliUprightBody(refs.loli);
         refs.loli.body.setImmovable(false);
         refs.loli.body.allowGravity = true;
         refs.loli.clearTint();
-        
+
         cleanupBerserkScene(scene);
         scheduleNextLaser(scene);
     });

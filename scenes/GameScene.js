@@ -7,16 +7,16 @@ import { createWeaponUI, getWeaponState, triggerReload, fireMG, fireSG, fireSN }
 import { createDashDust } from '../player/DashEffects.js';
 import { playerState, updatePlayer } from '../player/PlayerController.js';
 import { initBossRefs, bossState, handleLoliHit, updateLoliStateMachine } from '../boss/LoliStateMachine.js';
-import { initAttackRefs, spawnEnemyBall, scheduleNextLaser, rememberLoliBody } from '../boss/LoliAttacks.js';
+import { initAttackRefs, spawnEnemyBall, scheduleNextLaser, rememberLoliBody, scheduleJumpAttack } from '../boss/LoliAttacks.js';
 
-let player; 
-let loli; 
+let player;
+let loli;
 let keys;
 let platforms;
 let ground;
 let mgBullets;
 let sgBullets;
-let snBullets; 
+let snBullets;
 
 // --- 武器系統變數 --- (已搬移至 weapons/WeaponManager.js)
 let shockwaves; // 衝擊波群組
@@ -45,7 +45,7 @@ function preloadAssets() {
 function createScene() {
     const width = this.cameras.main.width;
     const height = this.cameras.main.height;
-    
+
     // 啟用多點觸控 (最多支援 5 點同時操作)
     this.input.addPointer(5);
 
@@ -74,7 +74,7 @@ function createScene() {
 
     // 將蘿莉初始位置下移至 height - 110，使其出生就在地板上 (修改)
     loli = this.physics.add.sprite(width / 4, height - 110, '蘿莉遇櫃人');
-    loli.setScale(0.3); 
+    loli.setScale(0.3);
     loli.setCollideWorldBounds(true);
     loli.setBounce(0.1);
     loli.isHit = false;
@@ -83,12 +83,12 @@ function createScene() {
     rememberLoliBody(loli);
 
     // 初始化狀態機與攻擊模組的共享參考
-    initAttackRefs({ loli, shockwaves, lasers, enemyBalls });
+    initAttackRefs({ loli, player, shockwaves, lasers, enemyBalls });
     initBossRefs({ loli, player, lasers, enemyBalls, shockwaves });
 
     this.physics.add.collider(player, platforms);
-    this.physics.add.collider(loli, platforms); 
-    
+    this.physics.add.collider(loli, platforms);
+
     // 子彈碰撞邏輯
     this.physics.add.collider(mgBullets, platforms);
     this.physics.add.collider(sgBullets, platforms);
@@ -107,8 +107,8 @@ function createScene() {
 
         // 子彈或衝擊波碰到牆壁 (世界邊界) 就消失
         if (mgBullets.contains(obj) || sgBullets.contains(obj) || snBullets.contains(obj) || shockwaves.contains(obj)) {
-            obj.destroy(); 
-        } 
+            obj.destroy();
+        }
         // 敵人彈跳球碰到天花板或牆壁就消失
         else if (enemyBalls.contains(obj)) {
             if (up || left || right) {
@@ -135,6 +135,9 @@ function createScene() {
 
     // 設定隨機雷射計時器 (3-7 秒觸發一次)
     scheduleNextLaser(this);
+    // 設定跳躍攻擊計時器 (10-15 秒一次)
+    scheduleJumpAttack(this);
+
 
     // 設定敵人彈跳球計時器 (一般模式頻率降低)
     const scheduleNextBall = () => {
@@ -173,7 +176,7 @@ function createScene() {
         left: Phaser.Input.Keyboard.KeyCodes.A,
         right: Phaser.Input.Keyboard.KeyCodes.D,
         reload: Phaser.Input.Keyboard.KeyCodes.R,
-        dash: Phaser.Input.Keyboard.KeyCodes.Q 
+        dash: Phaser.Input.Keyboard.KeyCodes.Q
     });
 }
 
@@ -189,19 +192,19 @@ function updateScene(time, delta) {
 
     const pointer = this.input.activePointer;
     const ws = getWeaponState(); // 取得武器狀態
-    
+
     // 彈弓射擊
     const triggerMg = isActuallyMobile ? mobileInput.fireMg : (pointer.leftButtonDown() || mobileInput.fireMg);
     if (triggerMg && !ws.mg.reloading && ws.mg.ammo > 0) {
         if (time > ws.mg.lastFired + ws.mg.fireRate) { fireMG(this, player, loli, mgBullets, pointer, mobileInput.fireMg); ws.mg.lastFired = time; }
     }
-    
+
     // 霸彈槍射擊
     const triggerSg = isActuallyMobile ? mobileInput.fireSg : (pointer.rightButtonDown() || mobileInput.fireSg);
     if (triggerSg && !ws.sg.reloading && ws.sg.ammo > 0 && time > ws.sg.lastFired + ws.sg.fireRate) {
         fireSG(this, player, loli, sgBullets, pointer, mobileInput.fireSg); ws.sg.lastFired = time;
     }
-    
+
     // 狙擊槍射擊
     const triggerSn = isActuallyMobile ? mobileInput.fireSn : (pointer.middleButtonDown() || mobileInput.fireSn);
     if (triggerSn && !ws.sn.reloading && ws.sn.ammo > 0 && time > ws.sn.lastFired + ws.sn.fireRate) {
@@ -216,7 +219,7 @@ function updateScene(time, delta) {
         const playerRect = player.getBounds();
         lasers.getChildren().forEach(laser => {
             if (!laser.active) return;
-            
+
             if (Math.abs(laser.angle) < 0.1) {
                 if (Phaser.Geom.Intersects.RectangleToRectangle(playerRect, laser.getBounds())) {
                     this.triggerCrash();
@@ -255,7 +258,7 @@ function updateScene(time, delta) {
                     y: ly + p.x * sin + p.y * cos
                 }));
                 const laserPoly = new Phaser.Geom.Polygon(corners);
-                
+
                 const testPoints = [
                     { x: player.x, y: player.y },
                     { x: playerRect.left, y: playerRect.top },
@@ -263,7 +266,7 @@ function updateScene(time, delta) {
                     { x: playerRect.right, y: playerRect.bottom },
                     { x: playerRect.left, y: playerRect.bottom }
                 ];
-                
+
                 // 修正：使用正確的 Phaser API (Phaser.Geom.Polygon.Contains) 代替不存在的方法
                 if (testPoints.some(p => Phaser.Geom.Polygon.Contains(laserPoly, p.x, p.y))) {
                     this.triggerCrash();
