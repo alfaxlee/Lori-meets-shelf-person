@@ -123,21 +123,41 @@ export function scheduleNextLaser(scene) {
 
 // --- 究極狂暴模式攻擊 ---
 
-/** 究極模式：左右雷射槍掃射 */
+/** 究極模式：四支雷射槍掃射 (左上、左下、右上、右下) */
 export function scheduleUltimateGunAttack(scene) {
     if (!refs.loli.active || !bossState.isUltimateBerserk) return;
     const fireGun = (gun, isLeft) => {
-        const startAngle = Phaser.Math.Between(-45, 45);
-        const endAngle = startAngle + Phaser.Math.Between(-90, 90);
+        if (!gun) return;
+        const centerX = scene.cameras.main.width / 2;
+        const centerY = scene.cameras.main.height / 2;
+        // 計算指向中心的基準角度 (以度為單位)
+        const baseAngleRad = Phaser.Math.Angle.Between(gun.x, gun.y, centerX, centerY);
+        let baseAngleDeg = Phaser.Math.RadToDeg(baseAngleRad);
+        
+        // 若為右側的槍，因為其圖形預設是朝左，需反轉 180 度
+        if (!isLeft) {
+            baseAngleDeg -= 180;
+        }
+        baseAngleDeg = Phaser.Math.Angle.WrapDegrees(baseAngleDeg);
+        
+        // 隨機產生朝向中心的偏差角度 (正負 45 度)
+        const startAngle = baseAngleDeg + Phaser.Math.Between(-45, 45);
+        const targetAngle = baseAngleDeg + Phaser.Math.Between(-45, 45);
+        
         gun.setAngle(startAngle);
-        const rad = Phaser.Math.DegToRad(startAngle);
+        
+        // 計算最短旋轉距離，避免因角度正規化導致 360 度大迴旋
+        const diff = Phaser.Math.Angle.ShortestBetween(gun.angle, targetAngle);
+        const endAngle = gun.angle + diff;
+        
+        const rad = Phaser.Math.DegToRad(gun.angle);
         const offsetX = isLeft ? 260 : -260;
         const worldX = gun.x + Math.cos(rad) * offsetX;
         const worldY = gun.y + Math.sin(rad) * offsetX;
         const laserOrigin = isLeft ? 0 : 1;
         const warningLine = scene.add.rectangle(worldX, worldY, 1500, 2, 0xff0000, 0.5).setOrigin(laserOrigin, 0.5);
         warningLine.name = 'warningLine';
-        warningLine.setAngle(startAngle);
+        warningLine.setAngle(gun.angle);
         scene.time.delayedCall(500, () => {
             if (warningLine) warningLine.destroy();
             if (!refs.loli.active || !bossState.isUltimateBerserk) return;
@@ -153,8 +173,12 @@ export function scheduleUltimateGunAttack(scene) {
             });
         });
     };
-    if (scene.berserkGunLeft) fireGun(scene.berserkGunLeft, true);
-    if (scene.berserkGunRight) fireGun(scene.berserkGunRight, false);
+    
+    fireGun(scene.ultimateGunTL, true);
+    fireGun(scene.ultimateGunBL, true);
+    fireGun(scene.ultimateGunTR, false);
+    fireGun(scene.ultimateGunBR, false);
+    
     scene.time.delayedCall(2000, () => scheduleUltimateGunAttack(scene));
 }
 
@@ -168,7 +192,7 @@ export function scheduleUltimateBalls(scene) {
 /** 究極模式：隨機角度雷射 */
 export function spawnUltimateLaser(scene) {
     if (!refs.loli.active || !bossState.isUltimateBerserk) return;
-    const laserCount = Phaser.Math.Between(3, 5);
+    const laserCount = Phaser.Math.Between(5, 10);
     const width = scene.cameras.main.width;
     const height = scene.cameras.main.height;
     for (let i = 0; i < laserCount; i++) {
@@ -211,6 +235,12 @@ export function cleanupBerserkScene(scene) {
     if (scene.berserkFloor) { scene.berserkFloor.destroy(); scene.berserkFloor = null; }
     if (scene.berserkGunLeft) { scene.berserkGunLeft.destroy(); scene.berserkGunLeft = null; }
     if (scene.berserkGunRight) { scene.berserkGunRight.destroy(); scene.berserkGunRight = null; }
+    
+    // 清除究極狂暴模式的四把槍
+    if (scene.ultimateGunTL) { scene.ultimateGunTL.destroy(); scene.ultimateGunTL = null; }
+    if (scene.ultimateGunBL) { scene.ultimateGunBL.destroy(); scene.ultimateGunBL = null; }
+    if (scene.ultimateGunTR) { scene.ultimateGunTR.destroy(); scene.ultimateGunTR = null; }
+    if (scene.ultimateGunBR) { scene.ultimateGunBR.destroy(); scene.ultimateGunBR = null; }
 }
 
 /** 

@@ -229,6 +229,29 @@ export function updateLoliStateMachine(scene, time, delta) {
                                 playerState.energyRegen = 1.0;
                                 player.setTint(0x00ffff);
 
+                                const width = scene.cameras.main.width;
+                                const height = scene.cameras.main.height;
+
+                                // 銷毀一般狂暴模式的兩把槍
+                                if (scene.berserkGunLeft) { scene.berserkGunLeft.destroy(); scene.berserkGunLeft = null; }
+                                if (scene.berserkGunRight) { scene.berserkGunRight.destroy(); scene.berserkGunRight = null; }
+
+                                // 建立究極狂暴模式的四把新槍 (左上、左下、右上、右下)
+                                const createGun = (x, y, isLeft) => {
+                                    const gun = scene.add.container(x, y);
+                                    const bodyX = isLeft ? 60 : -60;
+                                    const barrelX = isLeft ? 260 : -260;
+                                    const body = scene.add.rectangle(bodyX, 0, 320, 80, 0xff00ff);
+                                    const barrel = scene.add.rectangle(barrelX, 0, 80, 30, 0xff00ff);
+                                    gun.add([body, barrel]);
+                                    return gun;
+                                };
+
+                                scene.ultimateGunTL = createGun(0, height * 0.25, true);
+                                scene.ultimateGunBL = createGun(0, height * 0.75, true);
+                                scene.ultimateGunTR = createGun(width, height * 0.25, false);
+                                scene.ultimateGunBR = createGun(width, height * 0.75, false);
+
                                 bossState.isUltimateBerserk = true;
                                 scheduleUltimateGunAttack(scene);
                                 scheduleUltimateBalls(scene);
