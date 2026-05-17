@@ -3,7 +3,8 @@
 
 // --- 共享參考 ---
 let refs = {};
-let attackTimerEvent = null;
+let hammerTimerEvent = null;
+let summonSpikeTimerEvent = null;
 
 // 猥瑣大叔的狀態
 export const uncleState = {
@@ -14,7 +15,8 @@ export const uncleState = {
     moveTimer: 0,       // 隨機移動計時器
     isAttacking: false, // 是否正在進行大槌攻擊
     hammer: null,       // 大槌物件
-    spikes: []          // 地刺物件陣列 (因為可能同時存在多個)
+    spikes: [],         // 地刺物件陣列 (因為可能同時存在多個)
+    attackQueue: []     // 攻擊佇列
 };
 
 /**
@@ -46,13 +48,93 @@ function cleanupAllSpikes() {
 }
 
 /**
- * 排程大槌攻擊（每 4~6 秒）
+ * 處理子彈擊中地刺的邏輯
  */
-export function scheduleUncleAttack(scene) {
+function handleSpikeHit(obj1, obj2) {
+    let bullet, spike;
+    
+    // 透過屬性判斷哪個是地刺，哪個是子彈 (因為 Phaser 碰撞回呼參數順序不固定)
+    if (obj1.spikeHp !== undefined) {
+        spike = obj1;
+        bullet = obj2;
+    } else if (obj2.spikeHp !== undefined) {
+        spike = obj2;
+        bullet = obj1;
+    } else {
+        return;
+    }
+
+    if (bullet && bullet.active) bullet.destroy();
+    if (!spike || !spike.active) return;
+
+    spike.spikeHp -= 1;
+    
+    if (spike.spikeHp <= 0) {
+        spike.destroy();
+        uncleState.spikes = uncleState.spikes.filter(s => s !== spike);
+    } else {
+        // 血量為 10，每扣一滴血，顏色按比例朝白色 (#ffffff) 變淡
+        const maxHp = 10;
+        const damageTaken = maxHp - spike.spikeHp; 
+        const colorVal = Math.floor((damageTaken / maxHp) * 255);
+        const hexColor = (colorVal << 16) | (colorVal << 8) | colorVal;
+        spike.setFillStyle(hexColor);
+    }
+}
+
+/**
+ * 啟動大叔的所有攻擊計時迴圈
+ */
+export function startUncleAttacks(scene) {
+    if (hammerTimerEvent) hammerTimerEvent.remove();
+    if (summonSpikeTimerEvent) summonSpikeTimerEvent.remove();
+    scheduleNextHammer(scene);
+    scheduleNextSummonSpike(scene);
+}
+
+function scheduleNextHammer(scene) {
     if (!refs.uncle || !refs.uncle.active) return;
-    if (attackTimerEvent) attackTimerEvent.remove();
     // 攻擊頻率改為 2~4 秒
-    attackTimerEvent = scene.time.delayedCall(Phaser.Math.Between(2000, 4000), () => spawnHammerAttack(scene));
+    hammerTimerEvent = scene.time.delayedCall(Phaser.Math.Between(2000, 4000), () => {
+        uncleState.attackQueue.push('hammer');
+        tryExecuteNextAttack(scene);
+        scheduleNextHammer(scene);
+    });
+}
+
+function scheduleNextSummonSpike(scene) {
+    if (!refs.uncle || !refs.uncle.active) return;
+    // 攻擊頻率為 5~6 秒
+    summonSpikeTimerEvent = scene.time.delayedCall(Phaser.Math.Between(5000, 6000), () => {
+        uncleState.attackQueue.push('summonSpike');
+        tryExecuteNextAttack(scene);
+        scheduleNextSummonSpike(scene);
+    });
+}
+
+/**
+ * 處理攻擊佇列
+ */
+function tryExecuteNextAttack(scene) {
+    if (!refs.uncle || !refs.uncle.active || uncleState.isAttacking) return;
+    if (uncleState.attackQueue.length === 0) return;
+
+    const nextAttack = uncleState.attackQueue.shift();
+    if (nextAttack === 'hammer') {
+        spawnHammerAttack(scene);
+    } else if (nextAttack === 'summonSpike') {
+        spawnSummonSpikeAttack(scene);
+    }
+}
+
+/**
+ * 結束當前攻擊並觸發佇列中下一個攻擊
+ */
+function endAttack(scene) {
+    uncleState.isAttacking = false;
+    if (refs.uncle && refs.uncle.active) {
+        scene.time.delayedCall(100, () => tryExecuteNextAttack(scene));
+    }
 }
 
 /**
@@ -75,7 +157,14 @@ export function spawnHammerAttack(scene) {
     uncleState.hammer = h;
 
     // 決定向左或向右打 (轉 45 度往下打，表示旋轉到 ±135 度)
-    const hitLeft = Phaser.Math.Between(0, 1) === 0;
+    const mapWidth = scene.cameras.main.width;
+    let hitLeft = Phaser.Math.Between(0, 1) === 0;
+    
+    // 如果大叔離左邊界太近，強制向右打，避免在界外耍笨
+    if (refs.uncle.x < 300) hitLeft = false;
+    // 如果大叔離右邊界太近，強制向左打
+    else if (refs.uncle.x > mapWidth - 300) hitLeft = true;
+    
     const endAngle = hitLeft ? -135 : 135;
 
     // 短暫延遲後揮下 (縮短延遲與揮下時間，讓動作更俐落)
@@ -87,19 +176,18 @@ export function spawnHammerAttack(scene) {
             duration: 150, // 敲下去的速度變快
             ease: 'Cubic.easeIn',
             onComplete: () => {
-                spawnFloorSpike(scene, hitLeft);
+                spawnHammerSpike(scene, hitLeft);
                 cleanupHammer(); // 敲擊地板後大槌立刻消失
-                uncleState.isAttacking = false; // 大叔可以恢復自由移動
-                scheduleUncleAttack(scene); // 排程下一次攻擊
+                endAttack(scene); // 結束攻擊狀態並觸發下一個攻擊
             }
         });
     });
 }
 
 /**
- * 發動地刺攻擊（接在大槌之後）
+ * 發動大槌地刺攻擊（接在大槌之後）
  */
-export function spawnFloorSpike(scene, hitLeft) {
+export function spawnHammerSpike(scene, hitLeft) {
     if (!refs.uncle || !refs.uncle.active) {
         return;
     }
@@ -107,9 +195,14 @@ export function spawnFloorSpike(scene, hitLeft) {
     // 計算擊中點與地刺尺寸
     const offsetX = hitLeft ? -280 : 280;
     const spikeX = refs.uncle.x + offsetX;
-    const spikeHeight = scene.cameras.main.height / 2;
+    const spikeHeight = scene.cameras.main.height / 4; // 大槌打出來的地刺高度減半
     const spikeWidth = refs.uncle.displayWidth / 2;
     const floorY = scene.cameras.main.height - 70; // 地板上緣約在此
+
+    const mapWidth = scene.cameras.main.width;
+    if (spikeX - spikeWidth / 2 < 0 || spikeX + spikeWidth / 2 > mapWidth) {
+        return; // 在地圖外就不生成地刺
+    }
 
     // 建立黑色三角形地刺（初始藏在地板下）
     const spike = scene.add.polygon(spikeX, floorY + spikeHeight / 2, [
@@ -118,6 +211,20 @@ export function spawnFloorSpike(scene, hitLeft) {
         { x: spikeWidth, y: spikeHeight }
     ], 0x000000);
     uncleState.spikes.push(spike);
+
+    // 加入物理碰撞體，防止玩家衝刺直接穿過
+    scene.physics.add.existing(spike);
+    spike.body.immovable = true;
+    spike.body.allowGravity = false;
+    spike.body.setSize(spikeWidth, spikeHeight);
+    scene.physics.add.collider(refs.player, spike, () => {
+        if (scene.triggerCrash) scene.triggerCrash();
+    });
+    // 子彈擊中地刺會減少其血量
+    spike.spikeHp = 10;
+    if (refs.mgBullets) scene.physics.add.collider(refs.mgBullets, spike, handleSpikeHit);
+    if (refs.sgBullets) scene.physics.add.collider(refs.sgBullets, spike, handleSpikeHit);
+    if (refs.snBullets) scene.physics.add.collider(refs.snBullets, spike, handleSpikeHit);
 
     // 地刺升起
     scene.tweens.add({
@@ -128,7 +235,7 @@ export function spawnFloorSpike(scene, hitLeft) {
         onComplete: () => {
             // 維持兩秒
             scene.time.delayedCall(2000, () => {
-                if (spike) {
+                if (spike && spike.active) {
                     // 地刺墜回地下
                     scene.tweens.add({
                         targets: spike,
@@ -142,6 +249,118 @@ export function spawnFloorSpike(scene, hitLeft) {
                         }
                     });
                 }
+            });
+        }
+    });
+}
+
+/**
+ * 發動召喚地刺 (Summon Spike) 新技能
+ */
+export function spawnSummonSpikeAttack(scene) {
+    if (!refs.uncle || !refs.uncle.active) return;
+
+    uncleState.isAttacking = true;
+    refs.uncle.setVelocity(0, 0);
+    refs.uncle.setTint(0x444444); // 施法變黑 (使用深灰色 Tint 保留細節，不會變成純黑剪影)
+
+    // 0.2 秒後生成第一組地刺
+    scene.time.delayedCall(200, () => {
+        if (!refs.uncle || !refs.uncle.active) return;
+
+        // 第 1 組：向外 150 像素
+        createSummonSpikePair(scene, 150);
+
+        // 第 2 組：延遲 0.6 秒後
+        scene.time.delayedCall(600, () => {
+            if (!refs.uncle || !refs.uncle.active) return;
+            createSummonSpikePair(scene, 300);
+        });
+
+        // 第 3 組：延遲 1.2 秒後
+        scene.time.delayedCall(1200, () => {
+            if (!refs.uncle || !refs.uncle.active) return;
+            createSummonSpikePair(scene, 450);
+            
+            // 獨立定時器：地刺升起(150)+停留(500)+降下(150) = 800ms 後結束攻擊
+            scene.time.delayedCall(800, () => {
+                if (refs.uncle && refs.uncle.active) {
+                    refs.uncle.clearTint();
+                }
+                endAttack(scene);
+            });
+        });
+    });
+}
+
+/**
+ * 建立左右成對的召喚地刺
+ */
+function createSummonSpikePair(scene, offset) {
+    createSingleSummonSpike(scene, offset);
+    createSingleSummonSpike(scene, -offset);
+}
+
+/**
+ * 建立單個召喚地刺
+ */
+function createSingleSummonSpike(scene, offset) {
+    if (!refs.uncle || !refs.uncle.active) return;
+
+    const spikeX = refs.uncle.x + offset;
+    const spikeHeight = refs.uncle.displayHeight; // 高度為大叔高度
+    const spikeWidth = refs.uncle.displayWidth / 2; // 寬度為大叔一半
+    const floorY = scene.cameras.main.height - 70;
+
+    const mapWidth = scene.cameras.main.width;
+    // 若地刺在邊界外，取消生成
+    if (spikeX - spikeWidth / 2 < 0 || spikeX + spikeWidth / 2 > mapWidth) {
+        return;
+    }
+
+    const spike = scene.add.polygon(spikeX, floorY + spikeHeight / 2, [
+        { x: 0, y: spikeHeight },
+        { x: spikeWidth / 2, y: 0 },
+        { x: spikeWidth, y: spikeHeight }
+    ], 0x000000);
+    uncleState.spikes.push(spike);
+
+    // 加入物理碰撞體，防止玩家衝刺直接穿過
+    scene.physics.add.existing(spike);
+    spike.body.immovable = true;
+    spike.body.allowGravity = false;
+    spike.body.setSize(spikeWidth, spikeHeight);
+    scene.physics.add.collider(refs.player, spike, () => {
+        if (scene.triggerCrash) scene.triggerCrash();
+    });
+    // 子彈擊中地刺會減少其血量
+    spike.spikeHp = 10;
+    if (refs.mgBullets) scene.physics.add.collider(refs.mgBullets, spike, handleSpikeHit);
+    if (refs.sgBullets) scene.physics.add.collider(refs.sgBullets, spike, handleSpikeHit);
+    if (refs.snBullets) scene.physics.add.collider(refs.snBullets, spike, handleSpikeHit);
+
+    // 升起 (150ms)
+    scene.tweens.add({
+        targets: spike,
+        y: floorY - spikeHeight / 2,
+        duration: 150,
+        ease: 'Linear',
+        onComplete: () => {
+            // 停留 0.5s
+            scene.time.delayedCall(500, () => {
+                if (!spike || !spike.active) {
+                    return;
+                }
+                // 降下 (150ms)
+                scene.tweens.add({
+                    targets: spike,
+                    y: floorY + spikeHeight / 2,
+                    duration: 150,
+                    onComplete: () => {
+                        spike.destroy();
+                        uncleState.spikes = uncleState.spikes.filter(s => s !== spike);
+                    }
+                });
             });
         }
     });
@@ -177,7 +396,9 @@ export function handleUncleHit(scene, bullet, force, stunTime, damage, originX, 
         refs.uncle.setActive(false).setVisible(false).body.enable = false;
         scene.cameras.main.flash(500, 255, 0, 0);
         uncleState.isAttacking = false;
-        if (attackTimerEvent) attackTimerEvent.remove();
+        uncleState.attackQueue = []; // 清空佇列
+        if (hammerTimerEvent) hammerTimerEvent.remove();
+        if (summonSpikeTimerEvent) summonSpikeTimerEvent.remove();
         cleanupHammer();
         cleanupAllSpikes();
 
@@ -222,9 +443,10 @@ export function respawnUncle(scene, x, y) {
     
     uncleState.isAttacking = false;
     uncleState.isHit = false;
+    uncleState.attackQueue = [];
     cleanupHammer();
     cleanupAllSpikes();
-    scheduleUncleAttack(scene);
+    startUncleAttacks(scene);
 }
 
 /**
@@ -285,18 +507,6 @@ export function updateUncle(scene, time, delta) {
             if (isHit) {
                 if (scene.triggerCrash) scene.triggerCrash();
             }
-        }
-
-        // 偵測地刺碰撞 (支援多個地刺)
-        if (uncleState.spikes.length > 0) {
-            uncleState.spikes.forEach(spike => {
-                if (spike && spike.active) {
-                    const spikeRect = spike.getBounds();
-                    if (Phaser.Geom.Intersects.RectangleToRectangle(playerRect, spikeRect)) {
-                        if (scene.triggerCrash) scene.triggerCrash();
-                    }
-                }
-            });
         }
     }
 

@@ -1,7 +1,7 @@
 # 蘿莉遇櫃人
 
 > 一款以 **Phaser 3** 製作的 2D 橫向 Boss Rush 射擊遊戲。
-> 玩家需要使用三種武器打倒「蘿莉」Boss，並躲避越來越兇猛的攻擊。
+> 玩家需要使用三種武器依序打倒「蘿莉」與「猥瑣大叔」兩位 Boss，並躲避越來越兇猛的攻擊。
 
 ---
 
@@ -52,8 +52,9 @@ curseforge/
 │   ├── PlayerController.js # 玩家移動、衝刺與無敵邏輯
 │   └── DashEffects.js      # 衝刺粉塵視覺效果
 ├── boss/
-│   ├── LoliStateMachine.js # Boss AI 狀態機（HP、狀態切換、傷害處理）
-│   └── LoliAttacks.js      # 所有 Boss 攻擊實作（衝擊波、雷射、彈跳球、跳躍攻擊）
+│   ├── LoliStateMachine.js # 蘿莉 Boss AI 狀態機（HP、狀態切換、傷害處理）
+│   ├── LoliAttacks.js      # 蘿莉 Boss 攻擊實作（衝擊波、雷射、彈跳球、跳躍攻擊）
+│   └── UncleAttacks.js     # 猥瑣大叔 Boss AI、攻擊系統與碰撞判定
 ├── weapons/
 │   └── WeaponManager.js    # 三把武器的彈藥、射擊、換彈邏輯
 └── ui/
@@ -72,9 +73,10 @@ curseforge/
 
 ### `scenes/GameScene.js`
 - 遊戲主場景，實作 `preload()` / `create()` / `update()` 三階段
-- **協調所有模組**：在 `create` 呼叫各模組的初始化函式（`initAttackRefs`、`initBossRefs`、`createWeaponUI`、`createHUD` 等）
+- **協調所有模組**：在 `create` 呼叫各模組的初始化函式（`initAttackRefs`、`initBossRefs`、`initUncleRefs`、`createWeaponUI`、`createHUD` 等）
 - 處理所有物理碰撞器（玩家 vs 地板、子彈 vs Boss、玩家 vs 攻擊物）
 - 衝刺護盾（`createDashShield`）的實作也在此檔案
+- **Boss 輪替機制**：蘿莉死亡後透過 `onLoliDeath` 回呼清理蘿莉資源並生成猥瑣大叔
 
 ### `player/PlayerController.js`
 - 維護 `playerState`（衝刺能量、衝刺冷卻、無敵狀態）
@@ -92,8 +94,19 @@ curseforge/
 - HP 降至 **50** 以下觸發超級無敵 → 究極狂暴模式
 
 ### `boss/LoliAttacks.js`
-- 所有 Boss 攻擊的具體實作，透過 `initAttackRefs()` 注入共享物件
+- 所有蘿莉 Boss 攻擊的具體實作，透過 `initAttackRefs()` 注入共享物件
 - 攻擊種類：垂直雷射、衝擊波、彈跳球、跳躍攻擊、究極模式四砲台雷射、究極雷射、海嘯
+
+### `boss/UncleAttacks.js`
+- 猥瑣大叔 Boss 的所有狀態管理、AI 決策與攻擊實作
+- 透過 `initUncleRefs()` 注入共享物件（player、uncle、uncleHPText、子彈群組等）
+- **攻擊佇列系統**：`attackQueue` 陣列搭配 `tryExecuteNextAttack` 處理器，確保多重攻擊排隊執行
+- **大槌攻擊**：T 字形 Graphics 繪製，每 2~4 秒觸發，具備智慧轉向（避免朝牆外打）
+- **召喚地刺**：每 5~6 秒觸發，施法期間大叔變黑，依序生成三組成對地刺
+- **地刺耐久度**：每根地刺有 10 HP，被子彈擊中後逐漸從黑色變白直至破碎
+- **地刺碰撞箱**：所有地刺具備物理碰撞體，可阻擋玩家衝刺與子彈
+- **邊界檢查**：所有地刺生成前會檢查是否在地圖範圍內，避免生成在界外
+- **動態 AI**：70% 機率主動衝向玩家，具備跳躍追擊功能
 
 ### `weapons/WeaponManager.js`
 - 維護三把武器的彈藥量、射速、換彈時間
@@ -152,6 +165,8 @@ curseforge/
 
 ## Boss 行為與狀態機
 
+### 第一階段：蘿莉 Boss（HP: 600）
+
 Boss「蘿莉」有以下幾種狀態，優先順序由上到下：
 
 ```
@@ -182,7 +197,7 @@ isHit（受擊硬直）
     → 每 5-7 秒發動跳躍攻擊（拋物線跳到玩家頭上）
 ```
 
-### HP 閾值事件
+#### HP 閾值事件
 
 | HP | 事件 |
 |----|------|
@@ -190,7 +205,57 @@ isHit（受擊硬直）
 | < 150 | 觸發狂暴模式（isBerserk = true） |
 | 降到 50 以下（一次性） | 鎖定在 49 HP，觸發超級無敵（isSuperInvincible） |
 | 超級無敵結束 7 秒後 | 癱瘓（isExhausted），玩家可打完剩餘 50 HP |
-| ≤ 0 | Boss 死亡，閃紅、3 秒後重置 |
+| ≤ 0 | Boss 死亡 → 進入第二階段（猥瑣大叔登場） |
+
+### 第二階段：猥瑣大叔 Boss（HP: 800）
+
+蘿莉被擊敗後，猥瑣大叔在蘿莉的出生位置登場。大叔體型為蘿莉的 1.5 倍，具備獨立的 AI 與攻擊系統。
+
+```
+攻擊佇列模式
+    → 大槌攻擊與召喚地刺共用攻擊佇列
+    → 同一時間只能執行一種攻擊
+    → 攻擊結束後自動延遲 0.1 秒執行下一個排隊中的攻擊
+
+大槌攻擊（每 2~4 秒）
+    → 攻擊時大叔停止移動
+    → 生成 T 字形黑色大槌（Graphics 繪製）
+    → 智慧轉向：離牆壁太近時自動改變揮打方向
+    → 揮下後在地面生成地刺（高度為畫面高度 1/4）
+    → 地刺升起後維持 2 秒再降下消失
+
+召喚地刺（每 5~6 秒）
+    → 施法期間大叔變黑（深灰色 Tint 效果）
+    → 0.2 秒後開始生成三組成對地刺（左右各一根）
+    → 三組地刺間隔 0.6 秒依序出現
+    → 地刺高度等同大叔身高，寬度為大叔一半
+    → 地刺升起 → 停留 0.5 秒 → 降下消失
+    → 所有地刺消失後大叔恢復正常外觀
+
+地刺耐久度系統
+    → 每根地刺有 10 HP
+    → 被子彈擊中時顏色從黑色(#000000)逐漸變白
+    → 顏色隨受傷比例線性插值：黑 → 灰 → 淺灰 → 白
+    → HP 歸零時地刺立即破碎消失
+    → 所有種類的子彈（MG/SG/SN）均可擊中地刺
+
+地刺碰撞機制
+    → 地刺具備物理碰撞箱（immovable）
+    → 玩家碰到地刺 → 當機
+    → 玩家衝刺時無法穿越地刺
+    → 子彈碰到地刺 → 子彈消失 + 地刺扣血
+
+邊界智慧檢查
+    → 所有地刺生成前檢查是否在地圖範圍內
+    → 大槌攻擊離牆太近時自動改變方向
+    → 超出邊界的地刺自動取消生成
+
+移動 AI
+    → 70% 機率主動衝向玩家
+    → 具備跳躍追擊功能
+    → 受擊時擊退力減半
+    → 攻擊期間停止移動
+```
 
 ---
 
@@ -219,8 +284,9 @@ isHit（受擊硬直）
 - 無敵持續：衝刺結束後再延續 **1 秒**
 - 能量不足時，能量條抖動並閃紅
 - 究極狂暴模式期間：能量上限翻倍為 200，消耗減半，回復加快
+- **注意**：衝刺無法穿越猥瑣大叔的地刺
 
-### 跳躍攻擊（Jump Attack）
+### 跳躍攻擊（Jump Attack）— 蘿莉專屬
 
 - 冷卻：每 **5–7 秒**觸發一次（超級無敵/癱瘓期間停止）
 - 流程：
@@ -230,19 +296,27 @@ isHit（受擊硬直）
   4. 落地產生巨型咖啡色衝擊波（向左右斜上飛出）
   5. 螢幕兩側海嘯同步向中心移動，1.5 秒後在中央消失
 
-### 究極狂暴模式攻擊
+### 究極狂暴模式攻擊 — 蘿莉專屬
 
 - **四砲台雷射**：左上（TL）、左下（BL）、右上（TR）、右下（BR）四把砲台，同時朝中心方向±45°掃射，每 2 秒一輪
 - **每秒彈跳球**：每秒從 Boss 位置噴出 10 顆全向彈跳球
 - **隨機全域雷射**：在全畫面隨機位置以隨機角度發射長達 3000px 的雷射
 
+### 猥瑣大叔攻擊系統
+
+- **大槌攻擊**：每 2~4 秒，T 字形大槌揮擊地面並生成地刺
+- **召喚地刺**：每 5~6 秒，施法變黑，三組地刺依序從地面升起
+- **地刺耐久度**：10 HP，被子彈擊中逐漸變白後破碎，子彈同時消失
+- **攻擊佇列**：多重攻擊自動排隊，間隔 0.1 秒依序執行
+
 ### 死亡機制（BSOD）
 
-- 碰到 Boss 本體（一般/狂暴模式）→ 當機
+- 碰到 Boss 本體（蘿莉一般/狂暴模式、猥瑣大叔）→ 當機
 - 碰到衝擊波 → 當機
 - 碰到彈跳球 → 當機
+- 碰到大槌或地刺 → 當機
 - 雷射打到玩家 → 當機
-- **衝刺無敵期間**，上述攻擊均無效
+- **衝刺無敵期間**，上述攻擊均無效（但無法穿越地刺）
 
 ---
 
@@ -288,8 +362,9 @@ main.js
     │   ├── ui/HUD.js
     │   ├── player/PlayerController.js
     │   └── boss/LoliAttacks.js    （部分 import，注意循環依賴）
-    └── boss/LoliAttacks.js
-        └── boss/LoliStateMachine.js   （只 import bossState）
+    ├── boss/LoliAttacks.js
+    │   └── boss/LoliStateMachine.js   （只 import bossState）
+    └── boss/UncleAttacks.js       （獨立模組，無循環依賴）
 ```
 
 > ⚠️ `LoliAttacks.js` 與 `LoliStateMachine.js` 之間存在**部分循環引用**。
@@ -299,7 +374,7 @@ main.js
 
 ### 共享物件注入模式
 
-兩個 Boss 模組均使用 `refs` 模式：
+三個 Boss 模組均使用 `refs` 模式：
 
 ```js
 let refs = {};
@@ -311,16 +386,17 @@ export function initXxxRefs(gameRefs) { refs = gameRefs; }
 
 ```js
 initAttackRefs({ loli, player, shockwaves, lasers, enemyBalls });
-initBossRefs({ loli, player, lasers, enemyBalls, shockwaves });
+initBossRefs({ loli, player, lasers, enemyBalls, shockwaves, onLoliDeath });
+initUncleRefs({ uncle, uncleHPText, onUncleDeath, player, mgBullets, sgBullets, snBullets });
 ```
 
 ### 物理群組
 
 | 群組變數 | 內容 | 說明 |
 |----------|------|------|
-| `mgBullets` | 彈弓子彈 | 反彈，碰牆消失 |
-| `sgBullets` | 霰彈子彈 | 不受重力，碰牆消失 |
-| `snBullets` | 狙擊子彈 | 碰地板消失 |
+| `mgBullets` | 彈弓子彈 | 反彈，碰牆消失，碰地刺消失 |
+| `sgBullets` | 霰彈子彈 | 不受重力，碰牆消失，碰地刺消失 |
+| `snBullets` | 狙擊子彈 | 碰地板消失，碰地刺消失 |
 | `shockwaves` | 衝擊波 | 碰牆消失 |
 | `lasers` | 雷射/海嘯等 | body.enable = false（僅碰撞偵測用） |
 | `enemyBalls` | 彈跳球 | 碰地板反彈，碰天花板/牆消失 |
@@ -336,9 +412,10 @@ initBossRefs({ loli, player, lasers, enemyBalls, shockwaves });
 
 - 玩家圖片：從 YouTube 頭像 URL 遠端載入（`胖嘟嘟發電機`）
 - 地板圖片：從 Bing 圖片 URL 遠端載入（`地板`）
+- 猥瑣大叔圖片：從 Bing 圖片 URL 遠端載入（`猥瑣大叔`）
 - 其餘素材：本地 `assets/images/` 目錄
 
-### bossState 狀態旗標速查
+### bossState 狀態旗標速查（蘿莉）
 
 | 旗標 | 觸發條件 | 效果 |
 |------|----------|------|
@@ -348,3 +425,13 @@ initBossRefs({ loli, player, lasers, enemyBalls, shockwaves });
 | `isExhausted` | 究極模式 7 秒後 | Boss 倒地，玩家打完剩餘 HP |
 | `isHit` | 受到傷害時 | 擊退動畫硬直 |
 | `isScaling` | 超級無敵放大時 | 防止多次觸發放大動畫 |
+
+### uncleState 狀態旗標速查（猥瑣大叔）
+
+| 旗標 | 說明 |
+|------|------|
+| `isAttacking` | 正在執行攻擊（大槌或召喚地刺），期間停止移動 |
+| `isHit` | 受擊硬直中，擊退力減半 |
+| `attackQueue` | 攻擊佇列陣列，儲存待執行的攻擊類型 |
+| `hammer` | 當前大槌 Graphics 物件參考 |
+| `spikes` | 當前所有地刺物件陣列 |

@@ -8,7 +8,7 @@ import { createDashDust } from '../player/DashEffects.js';
 import { playerState, updatePlayer } from '../player/PlayerController.js';
 import { initBossRefs, bossState, handleLoliHit, updateLoliStateMachine, respawnLoli } from '../boss/LoliStateMachine.js';
 import { initAttackRefs, spawnEnemyBall, scheduleNextLaser, rememberLoliBody, scheduleJumpAttack } from '../boss/LoliAttacks.js';
-import { initUncleRefs, handleUncleHit, updateUncle, respawnUncle } from '../boss/UncleController.js';
+import { initUncleRefs, handleUncleHit, updateUncle, respawnUncle } from '../boss/UncleAttacks.js';
 
 let player;
 let loli;
@@ -206,7 +206,7 @@ function createScene() {
         showLoliHPText(true);
         // 重生蘿莉
         respawnLoli(scene);
-    }, player });
+    }, player, mgBullets, sgBullets, snBullets });
 
     // 蘿莉的子彈碰撞
     this.physics.add.collider(loli, mgBullets, (obj1, obj2) => { handleLoliHit(this, obj2, 600, 200, 5); });
