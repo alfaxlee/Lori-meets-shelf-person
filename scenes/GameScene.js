@@ -2,12 +2,13 @@
 // 包含所有遊戲邏輯（後續步驟將逐步拆分至獨立模組）
 import { mobileInput, isActuallyMobile, forceControls, detectMobile, setupMobileControls, repositionMobileControls } from '../ui/MobileControls.js';
 import { showCrashScreen } from '../ui/CrashScreen.js';
-import { createHUD, updateLoliHP, drawEnergyBar, getEnergyBar } from '../ui/HUD.js';
+import { createHUD, updateLoliHP, drawEnergyBar, getEnergyBar, showLoliHPText } from '../ui/HUD.js';
 import { createWeaponUI, getWeaponState, triggerReload, fireMG, fireSG, fireSN } from '../weapons/WeaponManager.js';
 import { createDashDust } from '../player/DashEffects.js';
 import { playerState, updatePlayer } from '../player/PlayerController.js';
-import { initBossRefs, bossState, handleLoliHit, updateLoliStateMachine } from '../boss/LoliStateMachine.js';
+import { initBossRefs, bossState, handleLoliHit, updateLoliStateMachine, respawnLoli } from '../boss/LoliStateMachine.js';
 import { initAttackRefs, spawnEnemyBall, scheduleNextLaser, rememberLoliBody, scheduleJumpAttack } from '../boss/LoliAttacks.js';
+import { initUncleRefs, handleUncleHit, updateUncle, respawnUncle } from '../boss/UncleController.js';
 
 let player;
 let loli;
@@ -17,6 +18,8 @@ let ground;
 let mgBullets;
 let sgBullets;
 let snBullets;
+let uncle;         // 猥瑣大叔 Sprite
+let uncleHPText;   // 猥瑣大叔血量文字
 
 // --- 武器系統變數 --- (已搬移至 weapons/WeaponManager.js)
 let shockwaves; // 衝擊波群組
@@ -39,6 +42,8 @@ function preloadAssets() {
     this.load.image('shabi', './assets/images/shabi.png');
     this.load.image('蘿莉遇櫃人', './assets/images/羅莉抓人.png');
     this.load.image('loliWin', './assets/images/蘿莉過關圖.png'); // 載入狂暴模式背景圖 (蘿莉過關圖)
+    // 載入猥瑣大叔圖片
+    this.load.image('猥瑣大叔', 'https://tse3.mm.bing.net/th/id/OIP.m_x1TY2hKDnQjwvLi8DWWAHaEK?r=0&rs=1&pid=ImgDetMain&o=7&rm=3');
 }
 
 // 建立遊戲場景（由 GameScene.create 委派呼叫）
@@ -82,12 +87,33 @@ function createScene() {
     // 呼叫 rememberLoliBody 記住原始碰撞箱大小，以便在癱瘓模式翻轉
     rememberLoliBody(loli);
 
+    // 建立猥瑣大叔（出生在畫面右側 3/4 處，大小為蘿莉的 1.5 倍）
+    uncle = this.physics.add.sprite(3 * width / 4, height - 110, '猥瑣大叔');
+    // 使用 setDisplaySize 確保視覺大小為蘿莉的 1.5 倍（不依賴原圖尺寸）
+    uncle.setDisplaySize(loli.displayWidth * 1.5, loli.displayHeight * 1.5);
+    uncle.setCollideWorldBounds(true);
+    uncle.setBounce(0.1);
+    // 猥瑣大叔初始隱藏，等蘿莉被打敗後才出現
+    uncle.setActive(false);
+    uncle.setVisible(false);
+    uncle.body.enable = false;
+
     // 初始化狀態機與攻擊模組的共享參考
     initAttackRefs({ loli, player, shockwaves, lasers, enemyBalls });
-    initBossRefs({ loli, player, lasers, enemyBalls, shockwaves });
+    // 傳入 onLoliDeath 回呼：蘿莉死亡後生成猥瑣大叔
+    initBossRefs({ loli, player, lasers, enemyBalls, shockwaves, onLoliDeath: (scene) => {
+        // 隱藏蘿莉血量，顯示猥瑣大叔血量
+        showLoliHPText(false);
+        uncleHPText.setVisible(true);
+        // 在蘿莉出生位置生成猥瑣大叔
+        const spawnX = scene.cameras.main.width / 4;
+        const spawnY = scene.cameras.main.height - 150;
+        respawnUncle(scene, spawnX, spawnY);
+    }});
 
     this.physics.add.collider(player, platforms);
     this.physics.add.collider(loli, platforms);
+    this.physics.add.collider(uncle, platforms); // 猥瑣大叔與地板碰撞
 
     // 子彈碰撞邏輯
     this.physics.add.collider(mgBullets, platforms);
@@ -130,6 +156,10 @@ function createScene() {
         if (bossState.isSuperInvincible || bossState.isExhausted) return; // 究極狂暴與癱瘓模式下，碰到蘿莉不會死掉
         triggerCrash(); // 一般或狂暴模式下，碰到玩家均觸發當機
     });
+    // 碰到猥瑣大叔也會當機
+    this.physics.add.collider(player, uncle, () => {
+        triggerCrash();
+    });
     this.physics.add.overlap(player, shockwaves, triggerCrash); // 玩家碰到衝擊波也會當機
     this.physics.add.overlap(player, enemyBalls, triggerCrash); // 玩家碰到彈跳球也會當機
 
@@ -166,10 +196,27 @@ function createScene() {
     createWeaponUI(this);
     // HUD 介面建立（蘿莉血量文字 + 衝刺能量條）
     createHUD(this, bossState.hp);
+    // 猥瑣大叔血量文字（初始隱藏，顯示在蘿莉血量下方）
+    uncleHPText = this.add.text(width / 2, 100, `猥瑣大叔血量: 800`, { fontSize: '30px', fill: '#ff00ff', fontStyle: 'bold', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5, 0);
+    uncleHPText.setVisible(false); // 初始隱藏
+    // 傳入 onUncleDeath 回呼：猥瑣大叔死亡後重生蘿莉
+    initUncleRefs({ uncle, uncleHPText, onUncleDeath: (scene) => {
+        // 隱藏猥瑣大叔血量，顯示蘿莉血量
+        uncleHPText.setVisible(false);
+        showLoliHPText(true);
+        // 重生蘿莉
+        respawnLoli(scene);
+    }});
 
+    // 蘿莉的子彈碰撞
     this.physics.add.collider(loli, mgBullets, (obj1, obj2) => { handleLoliHit(this, obj2, 600, 200, 5); });
     this.physics.add.collider(loli, sgBullets, (obj1, obj2) => { handleLoliHit(this, obj2, 400, 150, 25); });
     this.physics.add.collider(loli, snBullets, (obj1, obj2) => { handleLoliHit(this, obj2, 1500, 500, 50); });
+
+    // 猥瑣大叔的子彈碰撞（後座力在 handleUncleHit 內部自動減半）
+    this.physics.add.collider(uncle, mgBullets, (obj1, obj2) => { handleUncleHit(this, obj2, 600, 200, 5); });
+    this.physics.add.collider(uncle, sgBullets, (obj1, obj2) => { handleUncleHit(this, obj2, 400, 150, 25); });
+    this.physics.add.collider(uncle, snBullets, (obj1, obj2) => { handleUncleHit(this, obj2, 1500, 500, 50); });
 
     this.keys = this.input.keyboard.addKeys({
         up: Phaser.Input.Keyboard.KeyCodes.W,
@@ -278,13 +325,16 @@ function updateScene(time, delta) {
         // 將蘿莉的狀態與行為決策委派給 LoliStateMachine 處理
         updateLoliStateMachine(this, time, delta);
     }
+
+    // 更新猥瑣大叔邏輯（受擊硬直恢復等）
+    updateUncle(this, time, delta);
 }
 
 // createShockwaves / spawnLaser / spawnEnemyBall / createDashDust 已搬移至 boss/LoliAttacks.js 和 player/DashEffects.js
 
 
 function createDashShield(scene, player, angle) {
-    const shield = scene.add.graphics(); let hasHit = false; let alive = true;
+    const shield = scene.add.graphics(); let hasHitLoli = false; let hasHitUncle = false; let alive = true;
     scene.time.delayedCall(1150, () => { alive = false; });
     const onUpdate = () => {
         if (!alive || !player.active) { shield.destroy(); scene.events.off('update', onUpdate); return; }
@@ -298,11 +348,20 @@ function createDashShield(scene, player, angle) {
             shield.lineBetween(centerX + Math.cos(currentAngle) * 15, centerY + Math.sin(currentAngle) * 15, centerX + Math.cos(currentAngle) * radius, centerY + Math.sin(currentAngle) * radius);
         }
         shield.lineStyle(1, 0x00ffff, 1); shield.beginPath(); shield.arc(centerX, centerY, radius, startAngle, endAngle); shield.strokePath();
-        if (!hasHit && loli.active) {
+        // 護盾碰撞蘿莉
+        if (!hasHitLoli && loli.active) {
             const dist = Phaser.Math.Distance.Between(centerX, centerY, loli.x, loli.y);
             if (dist < radius + 40) {
                 handleLoliHit(scene, null, 1500, 500, 25, centerX, centerY);
-                hasHit = true;
+                hasHitLoli = true;
+            }
+        }
+        // 護盾碰撞猥瑣大叔（後座力在 handleUncleHit 內部自動減半）
+        if (!hasHitUncle && uncle && uncle.active) {
+            const distU = Phaser.Math.Distance.Between(centerX, centerY, uncle.x, uncle.y);
+            if (distU < radius + 40) {
+                handleUncleHit(scene, null, 1500, 500, 25, centerX, centerY);
+                hasHitUncle = true;
             }
         }
     };

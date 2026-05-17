@@ -25,6 +25,14 @@ export function updateLoliHP(hp) {
 }
 
 /**
+ * 切換蘿莉血量文字的顯示/隱藏（Boss 輪替時使用）
+ * @param {boolean} visible - 是否顯示
+ */
+export function showLoliHPText(visible) {
+    if (loliHPText) loliHPText.setVisible(visible);
+}
+
+/**
  * 每幀繪製衝刺能量條
  * @param {number} dashEnergy - 目前能量
  * @param {number} maxDashEnergy - 最大能量

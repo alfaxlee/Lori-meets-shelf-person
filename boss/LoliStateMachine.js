@@ -1,6 +1,6 @@
 // === 蘿莉狀態機與 AI 邏輯模組 ===
 import { updateLoliHP } from '../ui/HUD.js';
-import { clearAllAttacks, cleanupBerserkScene, setLoliUprightBody, setLoliExhaustedBody, keepSpriteBottom, createShockwaves, scheduleNextLaser, scheduleUltimateGunAttack, scheduleUltimateBalls, spawnUltimateLaser } from './LoliAttacks.js';
+import { clearAllAttacks, cleanupBerserkScene, setLoliUprightBody, setLoliExhaustedBody, keepSpriteBottom, createShockwaves, scheduleNextLaser, scheduleJumpAttack, scheduleUltimateGunAttack, scheduleUltimateBalls, spawnUltimateLaser } from './LoliAttacks.js';
 import { playerState } from '../player/PlayerController.js';
 
 export const bossState = {
@@ -48,28 +48,45 @@ export function handleLoliDeath(scene) {
     scene.cameras.main.flash(500, 255, 0, 0);
     clearAllAttacks(scene);
 
+    // 立即重置狂暴相關狀態與場景物件
+    bossState.isBerserk = false;
+    bossState.isSuperInvincible = false;
+    bossState.isUltimateBerserk = false;
+    bossState.isExhausted = false;
+    bossState.isScaling = false;
+    cleanupBerserkScene(scene);
+
     scene.time.delayedCall(3000, () => {
-        bossState.hp = bossState.maxHp;
-        updateLoliHP(bossState.hp);
-        refs.loli.setActive(true).setVisible(true).body.enable = true;
-        refs.loli.setPosition(scene.cameras.main.width / 4, scene.cameras.main.height - 150);
-
-        bossState.isBerserk = false;
-        bossState.isSuperInvincible = false;
-        bossState.isUltimateBerserk = false;
-        bossState.isExhausted = false;
-        bossState.isScaling = false;
-
-        refs.loli.setAngle(0);
-        refs.loli.setScale(0.3);
-        setLoliUprightBody(refs.loli);
-        refs.loli.body.setImmovable(false);
-        refs.loli.body.allowGravity = true;
-        refs.loli.clearTint();
-
-        cleanupBerserkScene(scene);
-        scheduleNextLaser(scene);
+        if (refs.onLoliDeath) {
+            // Boss 輪替模式：通知外部處理（不自動重生蘿莉）
+            refs.onLoliDeath(scene);
+        } else {
+            // 預設行為：自動重生蘿莉
+            respawnLoli(scene);
+        }
     });
+}
+
+/**
+ * 重生蘿莉（重置所有狀態並顯示）
+ * 可由外部（如 Boss 輪替回呼）呼叫
+ */
+export function respawnLoli(scene) {
+    bossState.hp = bossState.maxHp;
+    updateLoliHP(bossState.hp);
+    refs.loli.setActive(true).setVisible(true).body.enable = true;
+    refs.loli.setPosition(scene.cameras.main.width / 4, scene.cameras.main.height - 150);
+
+    refs.loli.setAngle(0);
+    refs.loli.setScale(0.3);
+    setLoliUprightBody(refs.loli);
+    refs.loli.body.setImmovable(false);
+    refs.loli.body.allowGravity = true;
+    refs.loli.clearTint();
+
+    // 重新排程蘿莉的攻擊計時器
+    scheduleNextLaser(scene);
+    scheduleJumpAttack(scene);
 }
 
 /** 處理蘿莉受到的傷害 */
