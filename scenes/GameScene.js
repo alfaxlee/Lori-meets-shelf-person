@@ -206,7 +206,7 @@ function createScene() {
         showLoliHPText(true);
         // 重生蘿莉
         respawnLoli(scene);
-    }});
+    }, player });
 
     // 蘿莉的子彈碰撞
     this.physics.add.collider(loli, mgBullets, (obj1, obj2) => { handleLoliHit(this, obj2, 600, 200, 5); });
