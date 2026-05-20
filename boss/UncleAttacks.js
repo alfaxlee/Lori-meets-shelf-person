@@ -1,5 +1,6 @@
-// === 猥瑣大叔控制模組 ===
-// 負責猥瑣大叔的基本狀態、受傷處理、AI 移動與大槌地刺攻擊
+// === 猥瑣大叔攻擊模組 ===
+// 負責猥瑣大叔的攻擊實作（大槌、地刺、黑球衝刺）
+import { uncleState } from './UncleStateMachine.js';
 
 // --- 共享參考 ---
 let refs = {};
@@ -12,19 +13,6 @@ let ballRushContainer = null;   // 黑球容器 (Graphics + 刺碰撞體)
 let ballRushSpikeBodies = [];   // 刺的碰撞體陣列
 let ballRushTween = null;       // 旋轉 Tween 參考
 
-// 猥瑣大叔的狀態
-export const uncleState = {
-    hp: 800,            // 猥瑣大叔血量
-    maxHp: 800,
-    isHit: false,       // 是否處於受擊硬直
-    hitStunTimer: 0,    // 受擊硬直倒數計時
-    moveTimer: 0,       // 隨機移動計時器
-    isAttacking: false, // 是否正在進行大槌攻擊
-    hammer: null,       // 大槌物件
-    spikes: [],         // 地刺物件陣列 (因為可能同時存在多個)
-    attackQueue: []     // 攻擊佇列
-};
-
 /**
  * 初始化猥瑣大叔所需的遊戲物件參考
  * @param {object} gameRefs - 包含 uncle, player, uncleHPText, onUncleDeath 的物件
@@ -36,7 +24,7 @@ export function initUncleRefs(gameRefs) {
 /**
  * 清理大槌物件
  */
-function cleanupHammer() {
+export function cleanupHammer() {
     if (uncleState.hammer) {
         uncleState.hammer.destroy();
         uncleState.hammer = null;
@@ -46,7 +34,7 @@ function cleanupHammer() {
 /**
  * 清理所有地刺物件
  */
-function cleanupAllSpikes() {
+export function cleanupAllSpikes() {
     uncleState.spikes.forEach(spike => {
         if (spike) spike.destroy();
     });
@@ -378,95 +366,9 @@ function createSingleSummonSpike(scene, offset) {
 }
 
 /**
- * 處理猥瑣大叔受到的傷害
- * @param {Phaser.Scene} scene - 遊戲場景
- * @param {Phaser.GameObjects.Sprite|null} bullet - 擊中的子彈
- * @param {number} force - 原始擊退力道（會自動減半）
- * @param {number} stunTime - 硬直時間（毫秒）
- * @param {number} damage - 傷害值
- * @param {number} [originX] - 攻擊來源 X
- * @param {number} [originY] - 攻擊來源 Y
+ * 每幀更新大叔攻擊跟隨邏輯
  */
-export function handleUncleHit(scene, bullet, force, stunTime, damage, originX, originY) {
-    if (!refs.uncle || !refs.uncle.active) {
-        if (bullet) bullet.destroy();
-        return;
-    }
-
-    const srcX = bullet ? bullet.x : (originX ?? refs.uncle.x - 1);
-    const srcY = bullet ? bullet.y : (originY ?? refs.uncle.y);
-    const angle = Phaser.Math.Angle.Between(srcX, srcY, refs.uncle.x, refs.uncle.y);
-
-    uncleState.hp -= damage;
-    if (refs.uncleHPText) {
-        refs.uncleHPText.setText(`猥瑣大叔血量: ${uncleState.hp}`);
-    }
-
-    if (uncleState.hp <= 0) {
-        // 死亡處理：隱藏並清理攻擊
-        refs.uncle.setActive(false).setVisible(false).body.enable = false;
-        scene.cameras.main.flash(500, 255, 0, 0);
-        uncleState.isAttacking = false;
-        uncleState.attackQueue = []; // 清空佇列
-        if (hammerTimerEvent) hammerTimerEvent.remove();
-        if (summonSpikeTimerEvent) summonSpikeTimerEvent.remove();
-        if (ballRushTimerEvent) ballRushTimerEvent.remove(); // 清除黑球衝刺計時器
-        cleanupHammer();
-        cleanupAllSpikes();
-        cleanupBallRush(); // 清除黑球衝刺物件
-
-        scene.time.delayedCall(3000, () => {
-            if (refs.onUncleDeath) {
-                refs.onUncleDeath(scene);
-            } else {
-                respawnUncle(scene);
-            }
-        });
-    } else {
-        refs.uncle.setTint(0xff0000);
-        
-        // 攻擊時不能動，所以不套用擊退力道與一般硬直
-        if (uncleState.isAttacking) {
-            scene.time.delayedCall(100, () => {
-                if (!uncleState.isHit && refs.uncle.active) refs.uncle.clearTint();
-            });
-        } else {
-            uncleState.isHit = true;
-            uncleState.hitStunTimer = stunTime;
-            const halfForce = force / 2;
-            refs.uncle.setVelocity(Math.cos(angle) * halfForce, Math.sin(angle) * halfForce - 100);
-            scene.cameras.main.shake(100, 0.005);
-        }
-    }
-
-    if (bullet) bullet.destroy();
-}
-
-/**
- * 重生猥瑣大叔（重置 HP 並顯示在指定位置）
- */
-export function respawnUncle(scene, x, y) {
-    uncleState.hp = uncleState.maxHp;
-    if (refs.uncleHPText) refs.uncleHPText.setText(`猥瑣大叔血量: ${uncleState.hp}`);
-    const spawnX = x ?? (3 * scene.cameras.main.width / 4);
-    const spawnY = y ?? (scene.cameras.main.height - 150);
-    refs.uncle.setActive(true).setVisible(true).body.enable = true;
-    refs.uncle.setPosition(spawnX, spawnY);
-    refs.uncle.clearTint();
-    
-    uncleState.isAttacking = false;
-    uncleState.isHit = false;
-    uncleState.attackQueue = [];
-    cleanupHammer();
-    cleanupAllSpikes();
-    cleanupBallRush(); // 確保重生時清除殘留的黑球
-    startUncleAttacks(scene);
-}
-
-/**
- * 每幀更新猥瑣大叔邏輯
- */
-export function updateUncle(scene, time, delta) {
+export function updateUncleAttacks(scene) {
     if (!refs.uncle || !refs.uncle.active) return;
 
     // 大槌握柄末端一直跟隨猥瑣大叔中央
@@ -474,7 +376,7 @@ export function updateUncle(scene, time, delta) {
         uncleState.hammer.setPosition(refs.uncle.x, refs.uncle.y);
     }
 
-    // 玩家碰到大槌或地刺死亡的判定
+    // 玩家碰到大槌或地刺死亡的判定 (黑球衝刺已包含在自身邏輯)
     if (refs.player && refs.player.active) {
         const playerRect = refs.player.getBounds();
 
@@ -523,54 +425,6 @@ export function updateUncle(scene, time, delta) {
             }
         }
     }
-
-    // 受擊硬直恢復
-    if (uncleState.isHit) {
-        uncleState.hitStunTimer -= delta;
-        if (uncleState.hitStunTimer <= 0) {
-            uncleState.isHit = false;
-            refs.uncle.clearTint();
-        }
-    }
-
-    // 主動追蹤玩家與跳躍邏輯 (未攻擊且未硬直時)
-    if (!uncleState.isAttacking && !uncleState.isHit) {
-        uncleState.moveTimer -= delta;
-        if (uncleState.moveTimer <= 0) {
-            uncleState.moveTimer = Phaser.Math.Between(500, 1500); // 更新頻率提高為 0.5~1.5 秒
-            
-            if (refs.player && refs.player.active) {
-                const dir = Math.sign(refs.player.x - refs.uncle.x);
-                const dist = Math.abs(refs.player.x - refs.uncle.x);
-
-                // 70% 機率朝玩家方向移動，30% 機率稍微反方向走
-                if (Phaser.Math.Between(0, 100) < 70) {
-                    refs.uncle.setVelocityX(dir * Phaser.Math.Between(150, 400));
-                } else {
-                    refs.uncle.setVelocityX(-dir * Phaser.Math.Between(100, 200));
-                }
-
-                // 如果距離玩家較遠，跳躍機率提升至 50%
-                const jumpChance = dist > 300 ? 50 : 20;
-                if (refs.uncle.body.touching.down && Phaser.Math.Between(0, 100) < jumpChance) {
-                    refs.uncle.setVelocityY(-600);
-                }
-            } else {
-                // 如果抓不到玩家，才隨機走動
-                const r = Phaser.Math.Between(0, 2);
-                if (r === 0) refs.uncle.setVelocityX(-200);
-                else if (r === 1) refs.uncle.setVelocityX(200);
-                else refs.uncle.setVelocityX(0);
-
-                if (refs.uncle.body.touching.down && Phaser.Math.Between(0, 100) < 30) {
-                    refs.uncle.setVelocityY(-600);
-                }
-            }
-        }
-    } else if (uncleState.isAttacking) {
-        // 攻擊時保持不動
-        refs.uncle.setVelocityX(0);
-    }
 }
 
 // ============================================================
@@ -593,7 +447,7 @@ function scheduleNextBallRush(scene) {
 /**
  * 清理黑球衝刺相關物件（旋轉 Tween、容器、刺碰撞體）
  */
-function cleanupBallRush() {
+export function cleanupBallRush() {
     // 停止旋轉動畫
     if (ballRushTween) {
         ballRushTween.stop();
@@ -611,10 +465,6 @@ function cleanupBallRush() {
 
 /**
  * 建立帶刺黑球的視覺容器
- * @param {Phaser.Scene} scene
- * @param {number} x - 初始 X 座標
- * @param {number} y - 初始 Y 座標
- * @returns {Phaser.GameObjects.Container} 黑球容器
  */
 function createSpikeBallGraphics(scene, x, y) {
     const radius = 40;       // 球半徑
@@ -622,18 +472,14 @@ function createSpikeBallGraphics(scene, x, y) {
     const spikeLen = 28;     // 刺的長度
     const spikeBase = 8;     // 刺底部的寬度（三角形底邊）
 
-    // 建立黑色球體 Graphics
     const gfx = scene.add.graphics();
     gfx.fillStyle(0x000000, 1);
     gfx.fillCircle(0, 0, radius);
 
-    // 繪製 8 根黑刺（以容器中心為原點）
     for (let i = 0; i < spikeCount; i++) {
         const angle = (i / spikeCount) * Math.PI * 2;
-        // 刺的尖端方向
         const tipX = Math.cos(angle) * (radius + spikeLen);
         const tipY = Math.sin(angle) * (radius + spikeLen);
-        // 刺底部左右兩點（垂直於角度方向）
         const perpX = Math.cos(angle + Math.PI / 2) * spikeBase;
         const perpY = Math.sin(angle + Math.PI / 2) * spikeBase;
         const baseX = Math.cos(angle) * radius;
@@ -647,15 +493,13 @@ function createSpikeBallGraphics(scene, x, y) {
         );
     }
 
-    // 將 Graphics 放入容器，方便整體旋轉
     const container = scene.add.container(x, y, [gfx]);
-    container.setDepth(10); // 確保顯示在大叔上方
+    container.setDepth(10); 
     return container;
 }
 
 /**
  * 發動黑球衝刺攻擊
- * 流程：大叔隱身→黑球出現→橘色驚嘆號→0.2秒後衝刺→旋轉→恢復
  */
 export function spawnBallRushAttack(scene) {
     if (!refs.uncle || !refs.uncle.active) return;
@@ -663,54 +507,45 @@ export function spawnBallRushAttack(scene) {
     uncleState.isAttacking = true;
     refs.uncle.setVelocity(0, 0);
 
-    // 記錄衝刺目標：玩家當前位置（稍後 0.2 秒發射，目標已固定）
     const targetX = refs.player ? refs.player.x : refs.uncle.x;
     const targetY = refs.player ? refs.player.y : refs.uncle.y;
 
-    // === 步驟1：大叔隱身，顯示黑球 ===
-    refs.uncle.setVisible(false); // 隱藏原本 sprite
+    refs.uncle.setVisible(false); 
 
-    // 建立帶刺黑球容器（位置對齊大叔）
     ballRushContainer = createSpikeBallGraphics(scene, refs.uncle.x, refs.uncle.y);
 
-    // 建立黑球物理碰撞體（用獨立圓形作為物理代理）
-    const ballPhysics = scene.add.circle(refs.uncle.x, refs.uncle.y, 40, 0x000000, 0); // 透明，只做碰撞
+    const ballPhysics = scene.add.circle(refs.uncle.x, refs.uncle.y, 40, 0x000000, 0); 
     scene.physics.add.existing(ballPhysics);
-    ballPhysics.body.allowGravity = false;   // 衝刺時不受重力影響
-    ballPhysics.body.setCircle(40);          // 圓形碰撞體
-    ballPhysics.body.setCollideWorldBounds(true); // 不飛出邊界
-    ballRushSpikeBodies.push(ballPhysics);   // 加入清理列表
+    ballPhysics.body.allowGravity = false;   
+    ballPhysics.body.setCircle(40);          
+    ballPhysics.body.setCollideWorldBounds(true); 
+    ballRushSpikeBodies.push(ballPhysics);   
 
-    // 球碰到玩家 → 觸發 crash
     scene.physics.add.overlap(refs.player, ballPhysics, () => {
         if (scene.triggerCrash) scene.triggerCrash();
     });
 
-    // === 步驟2：在玩家位置顯示橘色驚嘆號 ===
     const exclamation = scene.add.text(
-        targetX, targetY - 60,    // 稍微在玩家頭上
+        targetX, targetY - 60,    
         '!',
         {
             fontSize: '64px',
-            color: '#ff8800',     // 橘色
+            color: '#ff8800',     
             fontWeight: 'bold',
             stroke: '#000000',
             strokeThickness: 4
         }
     ).setOrigin(0.5).setDepth(20);
 
-    // 驚嘆號閃爍效果
     scene.tweens.add({
         targets: exclamation,
         alpha: 0,
         duration: 100,
         yoyo: true,
-        repeat: 1  // 閃爍 2 次後 0.2 秒到
+        repeat: 1  
     });
 
-    // === 步驟3：0.2 秒後開始衝刺 ===
     scene.time.delayedCall(200, () => {
-        // 消除驚嘆號
         if (exclamation && exclamation.active) exclamation.destroy();
 
         if (!refs.uncle || !refs.uncle.active || !ballRushContainer) {
@@ -718,51 +553,41 @@ export function spawnBallRushAttack(scene) {
             return;
         }
 
-        // 計算衝刺方向（從大叔當前位置→目標）
         const startX = ballRushContainer.x;
         const startY = ballRushContainer.y;
         const dx = targetX - startX;
         const dy = targetY - startY;
         const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const speed = 900; // 衝刺速度（像素/秒）
+        const speed = 900; 
         const vx = (dx / dist) * speed;
         const vy = (dy / dist) * speed;
 
-        // 同步設定物理代理速度
         ballPhysics.body.setVelocity(vx, vy);
 
-        // 用 Tween 移動視覺容器（同步跟隨物理代理）
-        const rushDuration = 800; // 衝刺持續 0.8 秒
+        const rushDuration = 800; 
 
-        // 啟動旋轉動畫（模擬球高速旋轉）
         ballRushTween = scene.tweens.add({
             targets: ballRushContainer,
-            angle: '+=720',          // 衝刺期間轉兩圈（強調速度感）
+            angle: '+=720',          
             duration: rushDuration,
             ease: 'Linear'
         });
 
-        // 用 onUpdate 讓視覺容器跟隨物理代理的位置
-        const syncTween = scene.tweens.add({
+        scene.tweens.add({
             targets: { t: 0 },
             t: 1,
             duration: rushDuration,
             ease: 'Linear',
             onUpdate: () => {
-                // 每幀同步視覺容器位置到物理代理
                 if (ballRushContainer && ballRushContainer.active && ballPhysics && ballPhysics.active) {
                     ballRushContainer.setPosition(ballPhysics.x, ballPhysics.y);
                 }
             },
             onComplete: () => {
-                // 衝刺結束：先記錄停止位置，再清理，最後讓大叔傳送回來
                 const finalX = (ballPhysics && ballPhysics.active) ? ballPhysics.x : refs.uncle.x;
                 const finalY = (ballPhysics && ballPhysics.active) ? ballPhysics.y : refs.uncle.y;
-                // 清除物理代理（先清，避免多餘的碰撞觸發）
                 if (ballPhysics && ballPhysics.active) ballPhysics.destroy();
-                // 清理黑球容器與旋轉 Tween
                 cleanupBallRush();
-                // 讓大叔顯示在球最後停止的位置
                 if (refs.uncle && refs.uncle.active) {
                     refs.uncle.setPosition(finalX, finalY);
                     refs.uncle.setVisible(true);

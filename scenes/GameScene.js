@@ -8,7 +8,8 @@ import { createDashDust } from '../player/DashEffects.js';
 import { playerState, updatePlayer } from '../player/PlayerController.js';
 import { initBossRefs, bossState, handleLoliHit, updateLoliStateMachine, respawnLoli } from '../boss/LoliStateMachine.js';
 import { initAttackRefs, spawnEnemyBall, scheduleNextLaser, rememberLoliBody, scheduleJumpAttack } from '../boss/LoliAttacks.js';
-import { initUncleRefs, handleUncleHit, updateUncle, respawnUncle } from '../boss/UncleAttacks.js';
+import { initUncleRefs, startUncleAttacks, updateUncleAttacks } from '../boss/UncleAttacks.js';
+import { initUncleStateRefs, uncleState, handleUncleHit, updateUncleStateMachine, respawnUncle } from '../boss/UncleStateMachine.js';
 
 let player;
 let loli;
@@ -199,12 +200,18 @@ function createScene() {
     // 猥瑣大叔血量文字（初始隱藏，顯示在蘿莉血量下方）
     uncleHPText = this.add.text(width / 2, 100, `猥瑣大叔血量: 800`, { fontSize: '30px', fill: '#ff00ff', fontStyle: 'bold', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5, 0);
     uncleHPText.setVisible(false); // 初始隱藏
-    // 傳入 onUncleDeath 回呼：猥瑣大叔死亡後重生蘿莉
-    initUncleRefs({ uncle, uncleHPText, onUncleDeath: (scene) => {
-        // 隱藏猥瑣大叔血量，顯示蘿莉血量
+    // 初始化猥瑣大叔狀態機參考
+    initUncleStateRefs({ uncle, uncleHPText, onUncleDeath: (scene) => {
         uncleHPText.setVisible(false);
         showLoliHPText(true);
-        // 重生蘿莉
+        respawnLoli(scene);
+    }, player, mgBullets, sgBullets, snBullets });
+
+    // 初始化猥瑣大叔攻擊模組參考
+    initUncleRefs({ uncle, uncleHPText, onUncleDeath: (scene) => {
+        // 這裡的邏輯與上面的 initUncleStateRefs 相同，確保一致性
+        uncleHPText.setVisible(false);
+        showLoliHPText(true);
         respawnLoli(scene);
     }, player, mgBullets, sgBullets, snBullets });
 
@@ -326,8 +333,9 @@ function updateScene(time, delta) {
         updateLoliStateMachine(this, time, delta);
     }
 
-    // 更新猥瑣大叔邏輯（受擊硬直恢復等）
-    updateUncle(this, time, delta);
+    // 更新猥瑣大叔邏輯（狀態機 AI 與 攻擊跟隨）
+    updateUncleStateMachine(this, time, delta);
+    updateUncleAttacks(this);
 }
 
 // createShockwaves / spawnLaser / spawnEnemyBall / createDashDust 已搬移至 boss/LoliAttacks.js 和 player/DashEffects.js
