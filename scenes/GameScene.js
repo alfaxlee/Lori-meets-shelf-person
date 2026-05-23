@@ -146,12 +146,15 @@ function createScene() {
 
     // 當機畫面 (處理玩家死亡/受傷)
     let isCrashed = false; // 防止多次觸發當機
-    const triggerCrash = () => {
-        if (playerState.isInvincible || isCrashed) return; // 衝刺/護盾期間無敵，或已當機則跳過
+    const triggerCrash = (force = false) => {
+        // 確保 force 真的是布林值 true，因為 Phaser 的 collider 會傳入兩個遊戲物件(Truthy)
+        const isForced = force === true;
+        // 衝刺/護盾期間無敵 (若 isForced 為 true 則無視無敵)，或已當機則跳過
+        if ((playerState.isInvincible && !isForced) || isCrashed) return; 
         isCrashed = true;
         showCrashScreen(this); // 委派給 CrashScreen 模組處理 DOM 與動畫
     };
-    this.triggerCrash = triggerCrash; // 將當機函式掛載到場景，供外部雷射函式使用 (新增)
+    this.triggerCrash = triggerCrash; // 將當機函式掛載到場景，供外部雷射/地刺使用
 
     this.physics.add.collider(player, loli, () => {
         if (bossState.isSuperInvincible || bossState.isExhausted) return; // 究極狂暴與癱瘓模式下，碰到蘿莉不會死掉

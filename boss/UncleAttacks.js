@@ -83,18 +83,30 @@ export function startUncleAttacks(scene) {
     if (hammerTimerEvent) hammerTimerEvent.remove();
     if (summonSpikeTimerEvent) summonSpikeTimerEvent.remove();
     if (ballRushTimerEvent) ballRushTimerEvent.remove();
+    if (superSpikeTimerEvent) superSpikeTimerEvent.remove();
     scheduleNextHammer(scene);
     scheduleNextSummonSpike(scene);
     scheduleNextBallRush(scene); // 啟動黑球衝刺攻擊排程
+}
+
+let superSpikeTimerEvent = null; // 超級地刺計時器
+
+export function stopUncleAttacks() {
+    if (hammerTimerEvent) { hammerTimerEvent.remove(); hammerTimerEvent = null; }
+    if (summonSpikeTimerEvent) { summonSpikeTimerEvent.remove(); summonSpikeTimerEvent = null; }
+    if (ballRushTimerEvent) { ballRushTimerEvent.remove(); ballRushTimerEvent = null; }
+    if (superSpikeTimerEvent) { superSpikeTimerEvent.remove(); superSpikeTimerEvent = null; }
 }
 
 function scheduleNextHammer(scene) {
     if (!refs.uncle || !refs.uncle.active) return;
     // 攻擊頻率改為 2~4 秒
     hammerTimerEvent = scene.time.delayedCall(Phaser.Math.Between(2000, 4000), () => {
-        uncleState.attackQueue.push('hammer');
-        tryExecuteNextAttack(scene);
-        scheduleNextHammer(scene);
+        if (!uncleState.isOverload) {
+            uncleState.attackQueue.push('hammer');
+            tryExecuteNextAttack(scene);
+            scheduleNextHammer(scene);
+        }
     });
 }
 
@@ -102,9 +114,22 @@ function scheduleNextSummonSpike(scene) {
     if (!refs.uncle || !refs.uncle.active) return;
     // 攻擊頻率為 5~6 秒
     summonSpikeTimerEvent = scene.time.delayedCall(Phaser.Math.Between(5000, 6000), () => {
-        uncleState.attackQueue.push('summonSpike');
-        tryExecuteNextAttack(scene);
-        scheduleNextSummonSpike(scene);
+        if (!uncleState.isOverload) {
+            uncleState.attackQueue.push('summonSpike');
+            tryExecuteNextAttack(scene);
+            scheduleNextSummonSpike(scene);
+        }
+    });
+}
+
+export function scheduleNextSuperSpike(scene) {
+    if (!refs.uncle || !refs.uncle.active) return;
+    superSpikeTimerEvent = scene.time.delayedCall(Phaser.Math.Between(5000, 6000), () => {
+        if (uncleState.isOverload) {
+            uncleState.attackQueue.push('superSpike');
+            tryExecuteNextAttack(scene);
+            scheduleNextSuperSpike(scene);
+        }
     });
 }
 
@@ -123,6 +148,8 @@ function tryExecuteNextAttack(scene) {
     } else if (nextAttack === 'ballRush') {
         // 執行黑球衝刺攻擊
         spawnBallRushAttack(scene);
+    } else if (nextAttack === 'superSpike') {
+        spawnSuperSpikeAttack(scene);
     }
 }
 
@@ -595,6 +622,212 @@ export function spawnBallRushAttack(scene) {
                 }
                 endAttack(scene);
             }
+        });
+    });
+}
+
+
+// ============================================================
+// === 超級地刺攻擊 (過載模式專用) ===
+// ============================================================
+
+export function spawnSuperSpikeAttack(scene) {
+    if (!refs.uncle || !refs.uncle.active || !uncleState.overloadLimbs) return;
+
+    uncleState.isAttacking = true;
+    refs.uncle.setVelocity(0, 0);
+
+    const arms = uncleState.overloadLimbs;
+    
+    // 停止原本的呼吸擺動動畫，準備舉手
+    scene.tweens.killTweensOf(arms.armL_Group);
+    scene.tweens.killTweensOf(arms.armR_Group);
+
+    // 1. 大叔往上移動，避免擋住安全區，並同時舉起雙手
+    scene.tweens.add({
+        targets: refs.uncle,
+        y: '-=150',
+        duration: 500,
+        ease: 'Cubic.easeOut'
+    });
+    
+    scene.tweens.add({
+        targets: arms.armL_Group,
+        angle: -150, // 左手高舉
+        duration: 500,
+        ease: 'Cubic.easeOut'
+    });
+    
+    scene.tweens.add({
+        targets: arms.armR_Group,
+        angle: 150, // 右手高舉
+        duration: 500,
+        ease: 'Cubic.easeOut'
+    });
+
+    // 2. 延遲 0.5 秒後生成橘色警告刺
+    scene.time.delayedCall(500, () => {
+        if (!refs.uncle || !refs.uncle.active) {
+            endAttack(scene);
+            return;
+        }
+
+        const mapWidth = scene.cameras.main.width;
+        const floorY = scene.cameras.main.height - 70;
+        const spikeWidth = refs.uncle.displayWidth / 2; // 普通地刺寬度
+        const spikeHeight = refs.uncle.displayHeight * 3; // 地刺高度變成三倍
+        
+        // 確保安全區夠大（玩家寬度的 1.5 倍）
+        const playerWidth = refs.player ? refs.player.displayWidth : 50;
+        const safeZoneWidth = playerWidth * 1.5;
+        // 決定安全區的起始位置 (保證安全區在畫面內)
+        const safeZoneStartX = Phaser.Math.Between(0, mapWidth - safeZoneWidth);
+        const safeZoneEndX = safeZoneStartX + safeZoneWidth;
+        
+        const warningSpikes = [];
+
+        // 生成橘色警告刺
+        for (let x = 0; x < mapWidth; x += spikeWidth) {
+            const spikeLeft = x;
+            const spikeRight = x + spikeWidth;
+            
+            // 如果地刺範圍與安全區有任何重疊，則不生成此警告刺（留下安全的空位）
+            if (spikeRight > safeZoneStartX && spikeLeft < safeZoneEndX) continue;
+
+            const spikeX = x + spikeWidth / 2;
+            
+            // 建立橘色警告刺
+            const warningSpike = scene.add.polygon(spikeX, floorY, [
+                { x: 0, y: spikeHeight },
+                { x: spikeWidth / 2, y: 0 },
+                { x: spikeWidth, y: spikeHeight }
+            ], 0xffa500); 
+            
+            warningSpike.setAlpha(0.6); 
+            
+            // 讓警告刺閃爍
+            scene.tweens.add({
+                targets: warningSpike,
+                alpha: 0.2,
+                duration: 250,
+                yoyo: true,
+                repeat: -1
+            });
+            
+            warningSpikes.push(warningSpike);
+        }
+
+        // 3. 警告維持 2 秒後，銷毀警告刺並生成真正的暗紅色超級地刺
+        scene.time.delayedCall(2000, () => {
+            // 清除警告刺
+            warningSpikes.forEach(w => w.destroy());
+
+            if (!refs.uncle || !refs.uncle.active) {
+                endAttack(scene);
+                return;
+            }
+
+            const currentSpikes = [];
+
+            // 生成真實地刺
+            for (let x = 0; x < mapWidth; x += spikeWidth) {
+                const spikeLeft = x;
+                const spikeRight = x + spikeWidth;
+                
+                // 如果地刺範圍與安全區重疊，則不生成真實地刺
+                if (spikeRight > safeZoneStartX && spikeLeft < safeZoneEndX) continue;
+
+                const spikeX = x + spikeWidth / 2;
+                
+                // 建立暗紅色超級地刺 (藏在地板下)
+                const spike = scene.add.polygon(spikeX, floorY + spikeHeight / 2, [
+                    { x: 0, y: spikeHeight },
+                    { x: spikeWidth / 2, y: 0 },
+                    { x: spikeWidth, y: spikeHeight }
+                ], 0x8b0000); 
+                
+                uncleState.spikes.push(spike);
+                currentSpikes.push(spike);
+
+                // 加入物理碰撞
+                scene.physics.add.existing(spike);
+                spike.body.immovable = true;
+                spike.body.allowGravity = false;
+                spike.body.setSize(spikeWidth, spikeHeight);
+                
+                // 玩家碰到超級地刺，強制當機
+                scene.physics.add.collider(refs.player, spike, () => {
+                    if (scene.triggerCrash) scene.triggerCrash(true); 
+                });
+                
+                spike.spikeHp = 30; 
+                if (refs.mgBullets) scene.physics.add.collider(refs.mgBullets, spike, handleSpikeHit);
+                if (refs.sgBullets) scene.physics.add.collider(refs.sgBullets, spike, handleSpikeHit);
+                if (refs.snBullets) scene.physics.add.collider(refs.snBullets, spike, handleSpikeHit);
+
+                // 地刺升起動畫
+                scene.tweens.add({
+                    targets: spike,
+                    y: floorY - spikeHeight / 2,
+                    duration: 200,
+                    ease: 'Back.easeOut'
+                });
+            }
+
+            // 4. 地刺停留 1.5 秒後降下
+            scene.time.delayedCall(1500, () => {
+                currentSpikes.forEach(spike => {
+                    if (spike && spike.active) {
+                        scene.tweens.add({
+                            targets: spike,
+                            y: floorY + spikeHeight / 2,
+                            duration: 200,
+                            onComplete: () => {
+                                spike.destroy();
+                                uncleState.spikes = uncleState.spikes.filter(s => s !== spike);
+                            }
+                        });
+                    }
+                });
+
+                // 5. 動畫結束，雙手放下並恢復呼吸動畫
+                if (refs.uncle && refs.uncle.active && uncleState.overloadLimbs) {
+                    scene.tweens.add({
+                        targets: arms.armL_Group,
+                        angle: -25,
+                        duration: 500,
+                        ease: 'Cubic.easeInOut'
+                    });
+                    scene.tweens.add({
+                        targets: arms.armR_Group,
+                        angle: 25,
+                        duration: 500,
+                        ease: 'Cubic.easeInOut',
+                        onComplete: () => {
+                            if (!refs.uncle || !refs.uncle.active) return;
+                            scene.tweens.add({
+                                targets: arms.armL_Group,
+                                angle: { from: -25, to: 10 },
+                                duration: 1500,
+                                yoyo: true,
+                                repeat: -1,
+                                ease: 'Sine.easeInOut'
+                            });
+                            scene.tweens.add({
+                                targets: arms.armR_Group,
+                                angle: { from: 25, to: -10 },
+                                duration: 1500,
+                                yoyo: true,
+                                repeat: -1,
+                                ease: 'Sine.easeInOut'
+                            });
+                            endAttack(scene);
+                        }
+                    });
+                } else {
+                    endAttack(scene);
+                }
+            });
         });
     });
 }

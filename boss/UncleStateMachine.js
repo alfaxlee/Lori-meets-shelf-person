@@ -1,6 +1,6 @@
 // === 猥瑣大叔狀態機與 AI 邏輯模組 ===
 // 負責猥瑣大叔的血量、狀態切換（一般/過載模式）與受傷處理
-import { startUncleAttacks, cleanupHammer, cleanupAllSpikes, cleanupBallRush } from './UncleAttacks.js';
+import { startUncleAttacks, stopUncleAttacks, scheduleNextSuperSpike, cleanupHammer, cleanupAllSpikes, cleanupBallRush } from './UncleAttacks.js';
 
 // 猥瑣大叔的狀態
 export const uncleState = {
@@ -14,8 +14,7 @@ export const uncleState = {
     spikes: [],         // 地刺物件陣列
     attackQueue: [],    // 攻擊佇列
     isOverload: false,  // 是否處於過載模式
-    overloadContainer: null, // 過載模式視覺容器
-    overloadEyes: null,      // 過載模式眼睛
+    overloadContainer: null, // 過載模式視覺容器（一體化，所有元件都在內）
     moveSpeedMultiplier: 1.0
 };
 
@@ -31,121 +30,234 @@ export function initUncleStateRefs(gameRefs) {
 /**
  * 進入過載模式 (Overload Mode)
  * 此模式在血量小於 200 時啟動
+ * 進入時：取消所有攻擊 → 隱藏大叔 Sprite → 建立一體化的黑暗實體容器
  */
 function enterOverloadMode(scene) {
     if (uncleState.isOverload) return;
     uncleState.isOverload = true;
 
+    // === 先取消所有進行中的攻擊 ===
+    uncleState.isAttacking = false;
+    uncleState.attackQueue = [];        // 清空攻擊佇列
+    stopUncleAttacks();                 // 停止所有攻擊排程計時器
+    cleanupHammer();                    // 清除大槌
+    cleanupAllSpikes();                 // 清除所有地刺
+    cleanupBallRush();                  // 清除黑球衝刺
+    
+    // 啟動過載模式專屬攻擊排程
+    scheduleNextSuperSpike(scene);
+
     // 震動螢幕表示進入強化狀態
     scene.cameras.main.shake(500, 0.01);
+    // 閃爍黑色代表黑暗力量甦醒
+    scene.cameras.main.flash(300, 0, 0, 0, true);
     
-    // 建立過載模式的視覺容器
-    const container = scene.add.container(refs.uncle.x, refs.uncle.y);
-    container.setDepth(refs.uncle.depth + 1); 
-    uncleState.overloadContainer = container;
-
-    // 隱藏原本的大叔 Sprite (實體仍然存在用於物理碰撞)
+    // === 隱藏原本的大叔 Sprite（物理碰撞體仍然存在） ===
     refs.uncle.setVisible(false);
 
-    // --- 1. 頭部 (對應要求中原本黃色的部分，放入大叔照片) ---
-    const headWidth = 160;
-    const headHeight = 100;
+    // === 建立過載模式的一體化視覺容器 ===
+    // 所有部件（頭、軀幹、四肢、刺、眼睛）全部放入同一個 Container
+    const container = scene.add.container(refs.uncle.x, refs.uncle.y);
+    container.setDepth(refs.uncle.depth + 1);
+    uncleState.overloadContainer = container;
+
+    // === 加大碰撞箱與設為飄浮 ===
+    refs.uncle.body.allowGravity = false;
+    // 碰撞箱變大以涵蓋巨大的黑暗實體，避免下半身插在地板裡
+    refs.uncle.body.setSize(refs.uncle.width * 1.5, refs.uncle.height * 2, true);
+
+    // --- 繪製主體 Graphics（軀幹+刺+下半身） ---
+    const bodyGfx = scene.add.graphics();
+    container.add(bodyGfx);
+
+    // ========== 軀幹 ==========
+    // 黑色主軀幹（圓角矩形效果，用圓形+矩形組合）
+    bodyGfx.fillStyle(0x111111, 1);
+    bodyGfx.fillRoundedRect(-55, -35, 110, 110, 12); // 軀幹主體
+    // 軀幹內的深紫色紋路裝飾
+    bodyGfx.fillStyle(0x220033, 1);
+    bodyGfx.fillRoundedRect(-35, -15, 70, 70, 8);
+    // 核心圖案：黑色圓形 + 十字紋
+    bodyGfx.fillStyle(0x000000, 1);
+    bodyGfx.fillCircle(0, 20, 12);
+    // 十字紋（上下左右小三角）
+    bodyGfx.fillTriangle(-6, 0, 6, 0, 0, -10);   // 上
+    bodyGfx.fillTriangle(-6, 40, 6, 40, 0, 50);   // 下
+    bodyGfx.fillTriangle(-18, 26, -18, 14, -28, 20); // 左
+    bodyGfx.fillTriangle(18, 26, 18, 14, 28, 20);   // 右
+
+    // ========== 肩膀黑刺（左右各 3 根） ==========
+    const drawShoulderSpikes = (side) => {
+        // side: 1=右, -1=左
+        const baseX = side * 55; // 肩膀外緣
+        for (let i = 0; i < 3; i++) {
+            const angle = (side > 0)
+                ? (-Math.PI / 4 + i * Math.PI / 8) // 右邊：從 -45° 到 0°
+                : (Math.PI + Math.PI / 4 - i * Math.PI / 8); // 左邊：從 225° 到 180°
+            const spikeLen = 30 + i * 8;  // 每根刺長度不同
+            const tipX = baseX + Math.cos(angle) * spikeLen;
+            const tipY = -20 + i * 15 + Math.sin(angle) * spikeLen;
+            const perpX = Math.cos(angle + Math.PI / 2) * 4;
+            const perpY = Math.sin(angle + Math.PI / 2) * 4;
+            bodyGfx.fillStyle(0x000000, 1);
+            bodyGfx.fillTriangle(
+                baseX + perpX, -20 + i * 15 + perpY,
+                baseX - perpX, -20 + i * 15 - perpY,
+                tipX, tipY
+            );
+        }
+    };
+    drawShoulderSpikes(1);  // 右肩
+    drawShoulderSpikes(-1); // 左肩
+
+    // ========== 頭頂黑刺（3 根向上發散） ==========
+    for (let i = -1; i <= 1; i++) {
+        const angle = -Math.PI / 2 + i * Math.PI / 8; // 向上偏左/中/偏右
+        const spikeLen = 35 + Math.abs(i) * 5;
+        const baseY = -85;
+        const tipX = Math.cos(angle) * spikeLen;
+        const tipY = baseY + Math.sin(angle) * spikeLen;
+        const perpX = Math.cos(angle + Math.PI / 2) * 4;
+        const perpY = Math.sin(angle + Math.PI / 2) * 4;
+        bodyGfx.fillStyle(0x000000, 1);
+        bodyGfx.fillTriangle(
+            perpX, baseY + perpY,
+            -perpX, baseY - perpY,
+            tipX, tipY
+        );
+    }
+
+    // ========== 下半身（尖刺裙擺） ==========
+    bodyGfx.fillStyle(0x111111, 1);
+    // 中央大三角
+    bodyGfx.fillTriangle(-50, 75, 50, 75, 0, 160);
+    // 左右小刺
+    bodyGfx.fillTriangle(-50, 75, -30, 75, -55, 130);
+    bodyGfx.fillTriangle(50, 75, 30, 75, 55, 130);
+
+    // --- 頭部 ---
+    // 在軀幹上方放置大叔照片作為頭部
+    const headWidth = 140;
+    const headHeight = 90;
     const head = scene.add.image(0, -80, '猥瑣大叔');
     head.setDisplaySize(headWidth, headHeight);
+    // 頭部加上深色 tint，讓它和黑暗主題融合
+    head.setTint(0x666666);
     container.add(head);
 
-    // 在頭部大叔圖案上面重疊兩個黑色眼睛
-    const eyeRadius = 25;
-    const leftEye = scene.add.circle(-40, -90, eyeRadius, 0x000000);
-    const rightEye = scene.add.circle(40, -90, eyeRadius, 0x000000);
+    // 在頭部上面疊加兩個發光紅色眼睛
+    const eyeRadius = 8;
+    const leftEye = scene.add.circle(-25, -85, eyeRadius, 0xff0000);
+    const rightEye = scene.add.circle(25, -85, eyeRadius, 0xff0000);
+    leftEye.setAlpha(0.9);
+    rightEye.setAlpha(0.9);
     container.add([leftEye, rightEye]);
-    uncleState.overloadEyes = [leftEye, rightEye];
 
-    // --- 2. 身體與四肢 (使用長方形、三角形，關節處不相連) ---
-    const gfx = scene.add.graphics();
-    container.add(gfx);
+    // 紅色眼睛脈動效果（在 container 內，不會晃來晃去）
+    scene.tweens.add({
+        targets: [leftEye, rightEye],
+        alpha: 0.3,
+        duration: 600,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+    });
 
-    // 繪製黑色的幾何體
-    gfx.fillStyle(0x000000, 1);
+    // --- 左臂：帶五指爪手 ---
+    const armLGfx = scene.add.graphics();
+    // 上臂（從肩膀往外下延伸）
+    armLGfx.fillStyle(0x111111, 1);
+    armLGfx.fillRect(-12, -5, 18, 55);    // 上臂主體
+    // 前臂（稍微彎曲向下）
+    armLGfx.fillRect(-15, 50, 18, 50);    // 前臂主體
+    // 手掌（黑色圓形）
+    armLGfx.fillStyle(0x000000, 1);
+    armLGfx.fillCircle(-6, 105, 14);      // 手掌圓形
+    // 五根手指（爪子形狀，向下扇形展開）
+    for (let f = 0; f < 5; f++) {
+        // 5 根手指從 -60° 到 60° 均勻分布
+        const fingerAngle = Math.PI / 2 + (-2 + f) * (Math.PI / 8);
+        const fingerLen = 20 + (f === 2 ? 5 : 0); // 中指最長
+        const fx = -6 + Math.cos(fingerAngle) * 14;
+        const fy = 105 + Math.sin(fingerAngle) * 14;
+        const ftx = fx + Math.cos(fingerAngle) * fingerLen;
+        const fty = fy + Math.sin(fingerAngle) * fingerLen;
+        // 每根手指畫成細長三角形
+        const pAngle = fingerAngle + Math.PI / 2;
+        const pw = 3; // 手指寬度
+        armLGfx.fillTriangle(
+            fx + Math.cos(pAngle) * pw, fy + Math.sin(pAngle) * pw,
+            fx - Math.cos(pAngle) * pw, fy - Math.sin(pAngle) * pw,
+            ftx, fty
+        );
+    }
+    // 上臂側邊小刺
+    armLGfx.fillStyle(0x000000, 1);
+    armLGfx.fillTriangle(-12, 15, -12, 30, -25, 22);
 
-    // 軀幹 (黑色正方形)
-    gfx.fillRect(-50, -30, 100, 100);
-
-    // 軀幹內的白色裝飾 (白色正方形)
-    gfx.fillStyle(0xffffff, 1);
-    gfx.fillRect(-30, -10, 60, 60);
-    
-    // 白色正方形內的黑色小圖案 (圓形與三角形)
-    gfx.fillStyle(0x000000, 1);
-    gfx.fillCircle(0, 20, 10);
-    // 上下左右的小三角形
-    gfx.fillTriangle(-5, 0, 5, 0, 0, -8);  // 上
-    gfx.fillTriangle(-5, 40, 5, 40, 0, 48); // 下
-    gfx.fillTriangle(-15, 25, -15, 15, -23, 20); // 左
-    gfx.fillTriangle(15, 25, 15, 15, 23, 20);  // 右
-
-    // --- 3. 四肢 (根據圖片中的分離設計) ---
-    // 左臂 (上抬) - 兩段式
-    const armL_Upper = scene.add.graphics().fillStyle(0x000000, 1);
-    armL_Upper.fillRect(-20, -40, 15, 60);
-    armL_Upper.fillTriangle(-20, -10, -20, 10, -35, 0); // 側邊小刺
-    
-    const armL_Lower = scene.add.graphics().fillStyle(0x000000, 1);
-    armL_Lower.fillRect(-25, -80, 20, 70);
-    // 手部 (月亮/爪子形狀)
-    const claw = scene.add.graphics().fillStyle(0x000000, 1);
-    claw.beginPath();
-    claw.arc(-15, -100, 40, 0, Math.PI * 2);
-    claw.fillPath();
-    claw.fillStyle(0xffffff, 1); // 用白色挖掉中間變成月亮感
-    claw.fillCircle(-15, -120, 30);
-    claw.fillStyle(0x000000, 1);
-
-    const armL_Group = scene.add.container(-70, 20, [armL_Upper, armL_Lower, claw]);
-    armL_Group.setAngle(-20);
+    // 左臂容器（定位在軀幹左肩外側）
+    const armL_Group = scene.add.container(-65, -10, [armLGfx]);
+    armL_Group.setAngle(-15); // 微微向外張開
     container.add(armL_Group);
 
-    // 右臂 (向下延伸的尖刃)
-    const armR = scene.add.graphics().fillStyle(0x000000, 1);
-    // 繪製一個長三角形刃
-    armR.fillTriangle(0, 0, 40, 40, 150, 150);
-    // 加入側邊的尖刺
-    armR.fillTriangle(30, 30, 50, 50, 70, 20);
-    armR.fillTriangle(80, 80, 100, 100, 120, 70);
-    
-    const armR_Group = scene.add.container(70, 20, [armR]);
+    // --- 右臂：帶五指爪手（鏡像） ---
+    const armRGfx = scene.add.graphics();
+    // 上臂
+    armRGfx.fillStyle(0x111111, 1);
+    armRGfx.fillRect(-6, -5, 18, 55);
+    // 前臂
+    armRGfx.fillRect(-3, 50, 18, 50);
+    // 手掌
+    armRGfx.fillStyle(0x000000, 1);
+    armRGfx.fillCircle(6, 105, 14);
+    // 五根手指（鏡像方向）
+    for (let f = 0; f < 5; f++) {
+        const fingerAngle = Math.PI / 2 + (-2 + f) * (Math.PI / 8);
+        const fingerLen = 20 + (f === 2 ? 5 : 0);
+        const fx = 6 + Math.cos(fingerAngle) * 14;
+        const fy = 105 + Math.sin(fingerAngle) * 14;
+        const ftx = fx + Math.cos(fingerAngle) * fingerLen;
+        const fty = fy + Math.sin(fingerAngle) * fingerLen;
+        const pAngle = fingerAngle + Math.PI / 2;
+        const pw = 3;
+        armRGfx.fillTriangle(
+            fx + Math.cos(pAngle) * pw, fy + Math.sin(pAngle) * pw,
+            fx - Math.cos(pAngle) * pw, fy - Math.sin(pAngle) * pw,
+            ftx, fty
+        );
+    }
+    // 上臂側邊小刺（鏡像）
+    armRGfx.fillStyle(0x000000, 1);
+    armRGfx.fillTriangle(18, 15, 18, 30, 31, 22);
+
+    // 右臂容器
+    const armR_Group = scene.add.container(65, -10, [armRGfx]);
+    armR_Group.setAngle(15); // 微微向外張開（鏡像）
     container.add(armR_Group);
 
-    // 下半身/腿部 (尖刺狀)
-    const leg = scene.add.graphics().fillStyle(0x000000, 1);
-    leg.fillTriangle(-40, 0, 40, 0, 0, 120);
-    leg.fillTriangle(0, 40, 0, 70, 40, 60); // 側邊刺
-    
-    const leg_Group = scene.add.container(0, 80, [leg]);
-    container.add(leg_Group);
+    // 將四肢引用存入狀態中，供攻擊動畫讀取與控制
+    uncleState.overloadLimbs = { armL_Group, armR_Group };
 
-    // --- 4. 動畫效果 ---
-    // 讓四肢與頭部有不同的不穩定晃動
+    // --- 動畫效果 ---
+    // 雙臂簡單擺動，確認使用肩膀為關節（容器的 0,0 即為肩膀紅點處）
     scene.tweens.add({
-        targets: [armL_Group, head],
-        y: '+=10',
-        duration: 800,
+        targets: armL_Group,
+        angle: { from: -25, to: 10 },
+        duration: 1500,
         yoyo: true,
         repeat: -1,
         ease: 'Sine.easeInOut'
     });
     scene.tweens.add({
-        targets: [armR_Group, leg_Group],
-        y: '-=10',
-        duration: 900,
+        targets: armR_Group,
+        angle: { from: 25, to: -10 },
+        duration: 1500,
         yoyo: true,
         repeat: -1,
         ease: 'Sine.easeInOut'
     });
 
-    uncleState.overloadLimbs = { armL_Group, armR_Group, leg_Group };
-
-    // 過載模式屬性提升
+    // 過載模式屬性提升：移動速度增加 50%
     uncleState.moveSpeedMultiplier = 1.5;
 }
 
@@ -177,14 +289,11 @@ export function handleUncleHit(scene, bullet, force, stunTime, damage, originX, 
         refs.uncle.setActive(false).setVisible(false).body.enable = false;
         scene.cameras.main.flash(500, 255, 0, 0);
         
-        // 清理過載模式視覺
+        // 清理過載模式視覺容器（一體化，銷毀容器即可清除所有內部元件）
         if (uncleState.overloadContainer) {
             uncleState.overloadContainer.destroy();
             uncleState.overloadContainer = null;
-        }
-        if (uncleState.overloadEyes) {
-            uncleState.overloadEyes.forEach(e => e.destroy());
-            uncleState.overloadEyes = null;
+            uncleState.overloadLimbs = null;
         }
 
         uncleState.isAttacking = false;
@@ -229,13 +338,11 @@ export function respawnUncle(scene, x, y) {
     uncleState.isOverload = false;
     uncleState.moveSpeedMultiplier = 1.0;
     
+    // 清理過載模式視覺容器
     if (uncleState.overloadContainer) {
         uncleState.overloadContainer.destroy();
         uncleState.overloadContainer = null;
-    }
-    if (uncleState.overloadEyes) {
-        uncleState.overloadEyes.forEach(e => e.destroy());
-        uncleState.overloadEyes = null;
+        uncleState.overloadLimbs = null;
     }
 
     if (refs.uncleHPText) refs.uncleHPText.setText(`猥瑣大叔血量: ${uncleState.hp}`);
@@ -244,6 +351,10 @@ export function respawnUncle(scene, x, y) {
     refs.uncle.setActive(true).setVisible(true).body.enable = true;
     refs.uncle.setPosition(spawnX, spawnY);
     refs.uncle.clearTint();
+    
+    // 恢復原本的碰撞箱與重力
+    refs.uncle.body.setSize(refs.uncle.width, refs.uncle.height, true);
+    refs.uncle.body.allowGravity = true;
     
     uncleState.isAttacking = false;
     uncleState.isHit = false;
@@ -260,17 +371,9 @@ export function respawnUncle(scene, x, y) {
 export function updateUncleStateMachine(scene, time, delta) {
     if (!refs.uncle || !refs.uncle.active) return;
 
-    // 更新過載模式視覺位置
-    if (uncleState.isOverload) {
-        if (uncleState.overloadContainer) {
-            uncleState.overloadContainer.setPosition(refs.uncle.x, refs.uncle.y);
-            // 輕微晃動效果，增加不穩定感
-            uncleState.overloadContainer.x += Math.sin(time / 50) * 2;
-        }
-        if (uncleState.overloadEyes) {
-            uncleState.overloadEyes[0].setPosition(refs.uncle.x - 20, refs.uncle.y - 40);
-            uncleState.overloadEyes[1].setPosition(refs.uncle.x + 20, refs.uncle.y - 40);
-        }
+    // 更新過載模式視覺位置（容器一體化，直接跟隨大叔物理體位置）
+    if (uncleState.isOverload && uncleState.overloadContainer) {
+        uncleState.overloadContainer.setPosition(refs.uncle.x, refs.uncle.y);
     }
 
     // 更新大叔原本的 update 邏輯 (移動、硬直等)
@@ -288,29 +391,47 @@ export function updateUncleStateMachine(scene, time, delta) {
 
     // AI 移動邏輯
     if (!uncleState.isAttacking && !uncleState.isHit) {
-        uncleState.moveTimer -= delta;
-        if (uncleState.moveTimer <= 0) {
-            const speedBase = uncleState.isOverload ? 300 : 150;
-            const speedMax = uncleState.isOverload ? 600 : 400;
-            uncleState.moveTimer = Phaser.Math.Between(500, 1500);
-            
+        if (uncleState.isOverload) {
+            // 過載模式：漂浮移動，持續跟隨在玩家上方
             if (refs.player && refs.player.active) {
-                const dir = Math.sign(refs.player.x - refs.uncle.x);
-                const dist = Math.abs(refs.player.x - refs.uncle.x);
+                const targetX = refs.player.x;
+                const targetY = refs.player.y - 150; // 漂浮在玩家上方 150 像素處
+                
+                const dx = targetX - refs.uncle.x;
+                const dy = targetY - refs.uncle.y;
+                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                
+                // 緩慢平滑地向目標點漂浮
+                const speed = 200;
+                refs.uncle.setVelocityX((dx / dist) * speed);
+                refs.uncle.setVelocityY((dy / dist) * speed);
+            }
+        } else {
+            // 一般模式：地上隨機移動
+            uncleState.moveTimer -= delta;
+            if (uncleState.moveTimer <= 0) {
+                const speedBase = 150;
+                const speedMax = 400;
+                uncleState.moveTimer = Phaser.Math.Between(500, 1500);
+                
+                if (refs.player && refs.player.active) {
+                    const dir = Math.sign(refs.player.x - refs.uncle.x);
+                    const dist = Math.abs(refs.player.x - refs.uncle.x);
 
-                if (Phaser.Math.Between(0, 100) < 70) {
-                    refs.uncle.setVelocityX(dir * Phaser.Math.Between(speedBase, speedMax));
-                } else {
-                    refs.uncle.setVelocityX(-dir * Phaser.Math.Between(100, 200));
-                }
+                    if (Phaser.Math.Between(0, 100) < 70) {
+                        refs.uncle.setVelocityX(dir * Phaser.Math.Between(speedBase, speedMax));
+                    } else {
+                        refs.uncle.setVelocityX(-dir * Phaser.Math.Between(100, 200));
+                    }
 
-                const jumpChance = dist > 300 ? 50 : 20;
-                if (refs.uncle.body.touching.down && Phaser.Math.Between(0, 100) < jumpChance) {
-                    refs.uncle.setVelocityY(-600);
+                    const jumpChance = dist > 300 ? 50 : 20;
+                    if (refs.uncle.body.touching.down && Phaser.Math.Between(0, 100) < jumpChance) {
+                        refs.uncle.setVelocityY(-600);
+                    }
                 }
             }
         }
     } else if (uncleState.isAttacking) {
-        refs.uncle.setVelocityX(0);
+        refs.uncle.setVelocity(0, 0);
     }
 }
