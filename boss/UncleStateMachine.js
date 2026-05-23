@@ -1,6 +1,6 @@
 // === 猥瑣大叔狀態機與 AI 邏輯模組 ===
 // 負責猥瑣大叔的血量、狀態切換（一般/過載模式）與受傷處理
-import { startUncleAttacks, stopUncleAttacks, scheduleNextSuperSpike, cleanupHammer, cleanupAllSpikes, cleanupBallRush } from './UncleAttacks.js';
+import { startUncleAttacks, stopUncleAttacks, scheduleNextOverloadAttack, cleanupHammer, cleanupAllSpikes, cleanupBallRush } from './UncleAttacks.js';
 
 // 猥瑣大叔的狀態
 export const uncleState = {
@@ -45,7 +45,7 @@ function enterOverloadMode(scene) {
     cleanupBallRush();                  // 清除黑球衝刺
     
     // 啟動過載模式專屬攻擊排程
-    scheduleNextSuperSpike(scene);
+    scheduleNextOverloadAttack(scene);
 
     // 震動螢幕表示進入強化狀態
     scene.cameras.main.shake(500, 0.01);

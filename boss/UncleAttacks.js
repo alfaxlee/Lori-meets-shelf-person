@@ -83,19 +83,19 @@ export function startUncleAttacks(scene) {
     if (hammerTimerEvent) hammerTimerEvent.remove();
     if (summonSpikeTimerEvent) summonSpikeTimerEvent.remove();
     if (ballRushTimerEvent) ballRushTimerEvent.remove();
-    if (superSpikeTimerEvent) superSpikeTimerEvent.remove();
+    if (overloadAttackTimerEvent) overloadAttackTimerEvent.remove();
     scheduleNextHammer(scene);
     scheduleNextSummonSpike(scene);
     scheduleNextBallRush(scene); // 啟動黑球衝刺攻擊排程
 }
 
-let superSpikeTimerEvent = null; // 超級地刺計時器
+let overloadAttackTimerEvent = null; // 超級地刺計時器
 
 export function stopUncleAttacks() {
     if (hammerTimerEvent) { hammerTimerEvent.remove(); hammerTimerEvent = null; }
     if (summonSpikeTimerEvent) { summonSpikeTimerEvent.remove(); summonSpikeTimerEvent = null; }
     if (ballRushTimerEvent) { ballRushTimerEvent.remove(); ballRushTimerEvent = null; }
-    if (superSpikeTimerEvent) { superSpikeTimerEvent.remove(); superSpikeTimerEvent = null; }
+    if (overloadAttackTimerEvent) { overloadAttackTimerEvent.remove(); overloadAttackTimerEvent = null; }
 }
 
 function scheduleNextHammer(scene) {
@@ -122,13 +122,16 @@ function scheduleNextSummonSpike(scene) {
     });
 }
 
-export function scheduleNextSuperSpike(scene) {
+export function scheduleNextOverloadAttack(scene) {
+    console.log('scheduleNextOverloadAttack triggered!');
     if (!refs.uncle || !refs.uncle.active) return;
-    superSpikeTimerEvent = scene.time.delayedCall(Phaser.Math.Between(5000, 6000), () => {
+    // 每 3 秒發動一次過載模式隨機攻擊
+    overloadAttackTimerEvent = scene.time.delayedCall(3000, () => {
         if (uncleState.isOverload) {
-            uncleState.attackQueue.push('superSpike');
+            const attacks = ['superSpike', 'superSpikeBall']; // 目前過載模式專屬攻擊
+            const randomAttack = Phaser.Utils.Array.GetRandom(attacks);
+            uncleState.attackQueue.push(randomAttack);
             tryExecuteNextAttack(scene);
-            scheduleNextSuperSpike(scene);
         }
     });
 }
@@ -150,6 +153,8 @@ function tryExecuteNextAttack(scene) {
         spawnBallRushAttack(scene);
     } else if (nextAttack === 'superSpike') {
         spawnSuperSpikeAttack(scene);
+    } else if (nextAttack === 'superSpikeBall') {
+        spawnSuperSpikeBallAttack(scene);
     }
 }
 
@@ -159,7 +164,14 @@ function tryExecuteNextAttack(scene) {
 function endAttack(scene) {
     uncleState.isAttacking = false;
     if (refs.uncle && refs.uncle.active) {
-        scene.time.delayedCall(100, () => tryExecuteNextAttack(scene));
+        scene.time.delayedCall(100, () => {
+            tryExecuteNextAttack(scene);
+            
+            // 如果在過載模式且攻擊佇列為空，排程下一次過載攻擊 (3秒後)
+            if (uncleState.isOverload && uncleState.attackQueue.length === 0) {
+                scheduleNextOverloadAttack(scene);
+            }
+        });
     }
 }
 
@@ -465,9 +477,11 @@ function scheduleNextBallRush(scene) {
     if (!refs.uncle || !refs.uncle.active) return;
     // 每 4~5 秒觸發一次黑球衝刺
     ballRushTimerEvent = scene.time.delayedCall(Phaser.Math.Between(4000, 5000), () => {
-        uncleState.attackQueue.push('ballRush');
-        tryExecuteNextAttack(scene);
-        scheduleNextBallRush(scene);
+        if (!uncleState.isOverload) {
+            uncleState.attackQueue.push('ballRush');
+            tryExecuteNextAttack(scene);
+            scheduleNextBallRush(scene);
+        }
     });
 }
 
@@ -493,14 +507,14 @@ export function cleanupBallRush() {
 /**
  * 建立帶刺黑球的視覺容器
  */
-function createSpikeBallGraphics(scene, x, y) {
+function createSpikeBallGraphics(scene, x, y, color = 0x000000) {
     const radius = 40;       // 球半徑
     const spikeCount = 8;    // 刺的數量
     const spikeLen = 28;     // 刺的長度
     const spikeBase = 8;     // 刺底部的寬度（三角形底邊）
 
     const gfx = scene.add.graphics();
-    gfx.fillStyle(0x000000, 1);
+    gfx.fillStyle(color, 1);
     gfx.fillCircle(0, 0, radius);
 
     for (let i = 0; i < spikeCount; i++) {
@@ -512,7 +526,7 @@ function createSpikeBallGraphics(scene, x, y) {
         const baseX = Math.cos(angle) * radius;
         const baseY = Math.sin(angle) * radius;
 
-        gfx.fillStyle(0x000000, 1);
+        gfx.fillStyle(color, 1);
         gfx.fillTriangle(
             baseX + perpX, baseY + perpY,
             baseX - perpX, baseY - perpY,
@@ -675,7 +689,7 @@ export function spawnSuperSpikeAttack(scene) {
         const mapWidth = scene.cameras.main.width;
         const floorY = scene.cameras.main.height - 70;
         const spikeWidth = refs.uncle.displayWidth / 2; // 普通地刺寬度
-        const spikeHeight = refs.uncle.displayHeight * 3; // 地刺高度變成三倍
+        const spikeHeight = floorY * 0.8; // 地刺高度為地板到天花板的 4/5
         
         // 確保安全區夠大（玩家寬度的 1.5 倍）
         const playerWidth = refs.player ? refs.player.displayWidth : 50;
@@ -829,5 +843,233 @@ export function spawnSuperSpikeAttack(scene) {
                 }
             });
         });
+    });
+}
+
+
+// ============================================================
+// === 超級刺球攻擊 (過載模式專用) ===
+// ============================================================
+
+export function spawnSuperSpikeBallAttack(scene) {
+    console.log('spawnSuperSpikeBallAttack triggered!');
+    if (!refs.uncle || !refs.uncle.active || !uncleState.overloadLimbs) return;
+
+    uncleState.isAttacking = true;
+    refs.uncle.setVelocity(0, 0);
+
+    const arms = uncleState.overloadLimbs;
+    
+    // 停止呼吸擺動動畫
+    scene.tweens.killTweensOf(arms.armL_Group);
+    scene.tweens.killTweensOf(arms.armR_Group);
+
+    // 1. 蓄力：雙手往內縮
+    scene.tweens.add({
+        targets: arms.armL_Group,
+        angle: -10, 
+        duration: 400,
+        ease: 'Cubic.easeIn'
+    });
+    
+    scene.tweens.add({
+        targets: arms.armR_Group,
+        angle: 10, 
+        duration: 400,
+        ease: 'Cubic.easeIn',
+        onComplete: () => {
+            // 2. 釋放：雙手往外打開
+            scene.tweens.add({
+                targets: arms.armL_Group,
+                angle: -100,
+                duration: 200,
+                ease: 'Cubic.easeOut'
+            });
+            scene.tweens.add({
+                targets: arms.armR_Group,
+                angle: 100,
+                duration: 200,
+                ease: 'Cubic.easeOut',
+                onComplete: () => {
+                    // 3. 發射超級刺球
+                    fireSuperSpikeBalls(scene);
+                    
+                    // 4. 動畫結束，雙手放下並恢復呼吸動畫
+                    scene.tweens.add({
+                        targets: arms.armL_Group,
+                        angle: -25,
+                        duration: 500,
+                        ease: 'Cubic.easeInOut'
+                    });
+                    scene.tweens.add({
+                        targets: arms.armR_Group,
+                        angle: 25,
+                        duration: 500,
+                        ease: 'Cubic.easeInOut',
+                        onComplete: () => {
+                            if (!refs.uncle || !refs.uncle.active) return;
+                            scene.tweens.add({
+                                targets: arms.armL_Group,
+                                angle: { from: -25, to: 10 },
+                                duration: 1500,
+                                yoyo: true,
+                                repeat: -1,
+                                ease: 'Sine.easeInOut'
+                            });
+                            scene.tweens.add({
+                                targets: arms.armR_Group,
+                                angle: { from: 25, to: -10 },
+                                duration: 1500,
+                                yoyo: true,
+                                repeat: -1,
+                                ease: 'Sine.easeInOut'
+                            });
+                            endAttack(scene);
+                        }
+                    });
+                }
+            });
+        }
+    });
+}
+
+function fireSuperSpikeBalls(scene) {
+    console.log('fireSuperSpikeBalls triggered!');
+    if (!refs.uncle || !refs.uncle.active) return;
+    
+    const startX = refs.uncle.x;
+    const startY = refs.uncle.y;
+    const mapWidth = scene.cameras.main.width;
+    const floorY = scene.cameras.main.height - 70;
+    
+    const specialIndex = Phaser.Math.Between(0, 4);
+    const balls = [];
+    
+    // 生成 5 顆刺球
+    for (let i = 0; i < 5; i++) {
+        // 隨機往下的角度 (Math.PI/6 到 Math.PI * 5/6)
+        const angle = Phaser.Math.FloatBetween(Math.PI / 6, Math.PI * 5 / 6);
+        const isSpecial = (i === specialIndex);
+        const color = isSpecial ? 0x8b0000 : 0x000000;
+        
+        const container = createSpikeBallGraphics(scene, startX, startY, color);
+        const physicsBody = scene.add.circle(startX, startY, 40, 0x000000, 0);
+        scene.physics.add.existing(physicsBody);
+        physicsBody.body.allowGravity = false;
+        physicsBody.body.setCircle(40);
+        
+        const speed = Phaser.Math.Between(400, 700);
+        physicsBody.body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+        
+        scene.physics.add.overlap(refs.player, physicsBody, () => {
+            if (scene.triggerCrash) scene.triggerCrash();
+        });
+        
+        balls.push({
+            container,
+            physicsBody,
+            isSpecial,
+            active: true
+        });
+    }
+    
+    // 讓刺球旋轉
+    const spinTweens = balls.map(b => scene.tweens.add({
+        targets: b.container,
+        angle: 360,
+        duration: 800,
+        repeat: -1,
+        ease: 'Linear'
+    }));
+    
+    // 每幀檢查刺球邊界與位置同步
+    const updateEvent = scene.time.addEvent({
+        delay: 16,
+        loop: true,
+        callback: () => {
+            let allDead = true;
+            
+            balls.forEach((b, index) => {
+                if (!b.active) return;
+                allDead = false;
+                
+                if (b.container && b.physicsBody) {
+                    b.container.setPosition(b.physicsBody.x, b.physicsBody.y);
+                }
+                
+                // 碰到左右牆壁或地板
+                if (b.physicsBody.x <= 40 || b.physicsBody.x >= mapWidth - 40 || b.physicsBody.y >= floorY - 40 || b.physicsBody.y <= 40) {
+                    b.active = false;
+                    const crashX = b.physicsBody.x;
+                    const crashY = b.physicsBody.y;
+                    
+                    b.physicsBody.destroy();
+                    b.container.destroy();
+                    spinTweens[index].stop();
+                    
+                    if (b.isSpecial) {
+                        spawnExplosionSpikes(scene, crashX, crashY, mapWidth, floorY);
+                    }
+                }
+            });
+            
+            if (allDead) {
+                updateEvent.remove();
+            }
+        }
+    });
+}
+
+function spawnExplosionSpikes(scene, startX, startY, mapWidth, floorY) {
+    const spikeCount = 8;
+    const spikeLen = 30;
+    const spikeBase = 10;
+    
+    const explosionSpikes = [];
+    
+    for (let i = 0; i < spikeCount; i++) {
+        const angle = (i / spikeCount) * Math.PI * 2;
+        
+        const spike = scene.add.polygon(startX, startY, [
+            { x: 0, y: -spikeLen },
+            { x: spikeBase, y: spikeLen },
+            { x: -spikeBase, y: spikeLen }
+        ], 0x8b0000); // 暗紅色碎刺
+        
+        spike.rotation = angle + Math.PI / 2;
+        
+        scene.physics.add.existing(spike);
+        spike.body.allowGravity = false;
+        spike.body.setCircle(spikeBase);
+        
+        const speed = 600; 
+        spike.body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+        
+        scene.physics.add.overlap(refs.player, spike, () => {
+            if (scene.triggerCrash) scene.triggerCrash();
+        });
+        
+        explosionSpikes.push(spike);
+    }
+    
+    const shardEvent = scene.time.addEvent({
+        delay: 16,
+        loop: true,
+        callback: () => {
+            let allDead = true;
+            explosionSpikes.forEach(s => {
+                if (s && s.active) {
+                    allDead = false;
+                    // 若碰到邊界則徹底銷毀
+                    if (s.x <= 0 || s.x >= mapWidth || s.y >= floorY || s.y <= 0) {
+                        s.destroy();
+                    }
+                }
+            });
+            
+            if (allDead) {
+                shardEvent.remove();
+            }
+        }
     });
 }
