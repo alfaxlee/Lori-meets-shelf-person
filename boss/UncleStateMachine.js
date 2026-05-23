@@ -15,6 +15,8 @@ export const uncleState = {
     attackQueue: [],    // 攻擊佇列
     isOverload: false,  // 是否處於過載模式
     overloadContainer: null, // 過載模式視覺容器（一體化，所有元件都在內）
+    spikeGraphics: [],  // 過載模式身上可分離的三角形 Graphics 陣列
+    spikeDefs: [],      // 儲存三角形形狀定義，供導彈攻擊使用
     moveSpeedMultiplier: 1.0
 };
 
@@ -69,6 +71,19 @@ function enterOverloadMode(scene) {
     // --- 繪製主體 Graphics（軀幹+刺+下半身） ---
     const bodyGfx = scene.add.graphics();
     container.add(bodyGfx);
+    
+    const bodySpikesGfx = scene.add.graphics();
+    container.add(bodySpikesGfx);
+    
+    uncleState.spikeGraphics = [bodySpikesGfx];
+    uncleState.spikeDefs = []; // 重置三角形定義
+
+    // 輔助函式：畫三角形並將點記錄下來，以便未來可作為導彈發射
+    const drawSpike = (gfx, groupName, color, x1, y1, x2, y2, x3, y3) => {
+        gfx.fillStyle(color, 1);
+        gfx.fillTriangle(x1, y1, x2, y2, x3, y3);
+        uncleState.spikeDefs.push({ group: groupName, color, p: [x1, y1, x2, y2, x3, y3] });
+    };
 
     // ========== 軀幹 ==========
     // 黑色主軀幹（圓角矩形效果，用圓形+矩形組合）
@@ -80,11 +95,11 @@ function enterOverloadMode(scene) {
     // 核心圖案：黑色圓形 + 十字紋
     bodyGfx.fillStyle(0x000000, 1);
     bodyGfx.fillCircle(0, 20, 12);
-    // 十字紋（上下左右小三角）
-    bodyGfx.fillTriangle(-6, 0, 6, 0, 0, -10);   // 上
-    bodyGfx.fillTriangle(-6, 40, 6, 40, 0, 50);   // 下
-    bodyGfx.fillTriangle(-18, 26, -18, 14, -28, 20); // 左
-    bodyGfx.fillTriangle(18, 26, 18, 14, 28, 20);   // 右
+    // 十字紋（上下左右小三角） -> 轉為可發射的導彈
+    drawSpike(bodySpikesGfx, 'body', 0x000000, -6, 0, 6, 0, 0, -10);   // 上
+    drawSpike(bodySpikesGfx, 'body', 0x000000, -6, 40, 6, 40, 0, 50);   // 下
+    drawSpike(bodySpikesGfx, 'body', 0x000000, -18, 26, -18, 14, -28, 20); // 左
+    drawSpike(bodySpikesGfx, 'body', 0x000000, 18, 26, 18, 14, 28, 20);   // 右
 
     // ========== 肩膀黑刺（左右各 3 根） ==========
     const drawShoulderSpikes = (side) => {
@@ -99,12 +114,7 @@ function enterOverloadMode(scene) {
             const tipY = -20 + i * 15 + Math.sin(angle) * spikeLen;
             const perpX = Math.cos(angle + Math.PI / 2) * 4;
             const perpY = Math.sin(angle + Math.PI / 2) * 4;
-            bodyGfx.fillStyle(0x000000, 1);
-            bodyGfx.fillTriangle(
-                baseX + perpX, -20 + i * 15 + perpY,
-                baseX - perpX, -20 + i * 15 - perpY,
-                tipX, tipY
-            );
+            drawSpike(bodySpikesGfx, 'body', 0x000000, baseX + perpX, -20 + i * 15 + perpY, baseX - perpX, -20 + i * 15 - perpY, tipX, tipY);
         }
     };
     drawShoulderSpikes(1);  // 右肩
@@ -119,21 +129,16 @@ function enterOverloadMode(scene) {
         const tipY = baseY + Math.sin(angle) * spikeLen;
         const perpX = Math.cos(angle + Math.PI / 2) * 4;
         const perpY = Math.sin(angle + Math.PI / 2) * 4;
-        bodyGfx.fillStyle(0x000000, 1);
-        bodyGfx.fillTriangle(
-            perpX, baseY + perpY,
-            -perpX, baseY - perpY,
-            tipX, tipY
-        );
+        drawSpike(bodySpikesGfx, 'body', 0x000000, perpX, baseY + perpY, -perpX, baseY - perpY, tipX, tipY);
     }
 
     // ========== 下半身（尖刺裙擺） ==========
     bodyGfx.fillStyle(0x111111, 1);
-    // 中央大三角
+    // 中央大三角 (不可發射)
     bodyGfx.fillTriangle(-50, 75, 50, 75, 0, 160);
-    // 左右小刺
-    bodyGfx.fillTriangle(-50, 75, -30, 75, -55, 130);
-    bodyGfx.fillTriangle(50, 75, 30, 75, 55, 130);
+    // 左右小刺 (轉為導彈)
+    drawSpike(bodySpikesGfx, 'body', 0x111111, -50, 75, -30, 75, -55, 130);
+    drawSpike(bodySpikesGfx, 'body', 0x111111, 50, 75, 30, 75, 55, 130);
 
     // --- 頭部 ---
     // 在軀幹上方放置大叔照片作為頭部
@@ -165,6 +170,9 @@ function enterOverloadMode(scene) {
 
     // --- 左臂：帶五指爪手 ---
     const armLGfx = scene.add.graphics();
+    const armLSpikesGfx = scene.add.graphics();
+    uncleState.spikeGraphics.push(armLSpikesGfx);
+
     // 上臂（從肩膀往外下延伸）
     armLGfx.fillStyle(0x111111, 1);
     armLGfx.fillRect(-12, -5, 18, 55);    // 上臂主體
@@ -191,17 +199,19 @@ function enterOverloadMode(scene) {
             ftx, fty
         );
     }
-    // 上臂側邊小刺
-    armLGfx.fillStyle(0x000000, 1);
-    armLGfx.fillTriangle(-12, 15, -12, 30, -25, 22);
+    // 上臂側邊小刺 (轉為導彈)
+    drawSpike(armLSpikesGfx, 'armL', 0x000000, -12, 15, -12, 30, -25, 22);
 
     // 左臂容器（定位在軀幹左肩外側）
-    const armL_Group = scene.add.container(-65, -10, [armLGfx]);
+    const armL_Group = scene.add.container(-65, -10, [armLGfx, armLSpikesGfx]);
     armL_Group.setAngle(-15); // 微微向外張開
     container.add(armL_Group);
 
     // --- 右臂：帶五指爪手（鏡像） ---
     const armRGfx = scene.add.graphics();
+    const armRSpikesGfx = scene.add.graphics();
+    uncleState.spikeGraphics.push(armRSpikesGfx);
+
     // 上臂
     armRGfx.fillStyle(0x111111, 1);
     armRGfx.fillRect(-6, -5, 18, 55);
@@ -226,12 +236,11 @@ function enterOverloadMode(scene) {
             ftx, fty
         );
     }
-    // 上臂側邊小刺（鏡像）
-    armRGfx.fillStyle(0x000000, 1);
-    armRGfx.fillTriangle(18, 15, 18, 30, 31, 22);
+    // 上臂側邊小刺（鏡像）(轉為導彈)
+    drawSpike(armRSpikesGfx, 'armR', 0x000000, 18, 15, 18, 30, 31, 22);
 
     // 右臂容器
-    const armR_Group = scene.add.container(65, -10, [armRGfx]);
+    const armR_Group = scene.add.container(65, -10, [armRGfx, armRSpikesGfx]);
     armR_Group.setAngle(15); // 微微向外張開（鏡像）
     container.add(armR_Group);
 

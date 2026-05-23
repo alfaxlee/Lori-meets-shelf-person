@@ -54,7 +54,8 @@ curseforge/
 ├── boss/
 │   ├── LoliStateMachine.js # 蘿莉 Boss AI 狀態機（HP、狀態切換、傷害處理）
 │   ├── LoliAttacks.js      # 蘿莉 Boss 攻擊實作（衝擊波、雷射、彈跳球、跳躍攻擊）
-│   └── UncleAttacks.js     # 猥瑣大叔 Boss AI、攻擊系統與碰撞判定
+│   ├── UncleStateMachine.js# 猥瑣大叔狀態機（HP、一般/過載模式切換、AI 移動）
+│   └── UncleAttacks.js     # 猥瑣大叔攻擊系統（大槌、地刺、黑球衝刺、超級地刺、超級刺球）
 ├── weapons/
 │   └── WeaponManager.js    # 三把武器的彈藥、射擊、換彈邏輯
 └── ui/
@@ -73,7 +74,7 @@ curseforge/
 
 ### `scenes/GameScene.js`
 - 遊戲主場景，實作 `preload()` / `create()` / `update()` 三階段
-- **協調所有模組**：在 `create` 呼叫各模組的初始化函式（`initAttackRefs`、`initBossRefs`、`initUncleRefs`、`createWeaponUI`、`createHUD` 等）
+- **協調所有模組**：在 `create` 呼叫各模組的初始化函式（`initAttackRefs`、`initBossRefs`、`initUncleRefs`、`initUncleStateRefs`、`createWeaponUI`、`createHUD` 等）
 - 處理所有物理碰撞器（玩家 vs 地板、子彈 vs Boss、玩家 vs 攻擊物）
 - 衝刺護盾（`createDashShield`）的實作也在此檔案
 - **Boss 輪替機制**：蘿莉死亡後透過 `onLoliDeath` 回呼清理蘿莉資源並生成猥瑣大叔
@@ -97,16 +98,19 @@ curseforge/
 - 所有蘿莉 Boss 攻擊的具體實作，透過 `initAttackRefs()` 注入共享物件
 - 攻擊種類：垂直雷射、衝擊波、彈跳球、跳躍攻擊、究極模式四砲台雷射、究極雷射、海嘯
 
+### `boss/UncleStateMachine.js`
+- 猥瑣大叔的狀態管理模組，維護 `uncleState` 全域狀態物件
+- `handleUncleHit()`：處理受傷、擊退、HP 閾值觸發（< 200 時進入過載模式）
+- `enterOverloadMode()`：進入過載模式的完整流程（清理舊攻擊 → 隱藏原 Sprite → 建立黑暗實體容器 → 啟動過載攻擊排程）
+- `updateUncleStateMachine()`：每幀更新 AI 移動（一般模式地面追蹤 / 過載模式漂浮跟隨）
+- `respawnUncle()`：重置大叔的所有狀態與碰撞箱
+
 ### `boss/UncleAttacks.js`
-- 猥瑣大叔 Boss 的所有狀態管理、AI 決策與攻擊實作
+- 猥瑣大叔 Boss 的所有攻擊實作
 - 透過 `initUncleRefs()` 注入共享物件（player、uncle、uncleHPText、子彈群組等）
 - **攻擊佇列系統**：`attackQueue` 陣列搭配 `tryExecuteNextAttack` 處理器，確保多重攻擊排隊執行
-- **大槌攻擊**：T 字形 Graphics 繪製，每 2~4 秒觸發，具備智慧轉向（避免朝牆外打）
-- **召喚地刺**：每 5~6 秒觸發，施法期間大叔變黑，依序生成三組成對地刺
-- **地刺耐久度**：每根地刺有 10 HP，被子彈擊中後逐漸從黑色變白直至破碎
-- **地刺碰撞箱**：所有地刺具備物理碰撞體，可阻擋玩家衝刺與子彈
-- **邊界檢查**：所有地刺生成前會檢查是否在地圖範圍內，避免生成在界外
-- **動態 AI**：70% 機率主動衝向玩家，具備跳躍追擊功能
+- **一般模式攻擊**：大槌攻擊、召喚地刺、黑球衝刺
+- **過載模式攻擊**：超級地刺、超級刺球（每 1 秒隨機選擇一種發動，攻擊結束後才計算下一次 1 秒冷卻）
 
 ### `weapons/WeaponManager.js`
 - 維護三把武器的彈藥量、射速、換彈時間
@@ -211,9 +215,11 @@ isHit（受擊硬直）
 
 蘿莉被擊敗後，猥瑣大叔在蘿莉的出生位置登場。大叔體型為蘿莉的 1.5 倍，具備獨立的 AI 與攻擊系統。
 
+#### 一般模式（HP ≥ 200）
+
 ```
 攻擊佇列模式
-    → 大槌攻擊與召喚地刺共用攻擊佇列
+    → 大槌攻擊、召喚地刺、黑球衝刺共用攻擊佇列
     → 同一時間只能執行一種攻擊
     → 攻擊結束後自動延遲 0.1 秒執行下一個排隊中的攻擊
 
@@ -231,6 +237,13 @@ isHit（受擊硬直）
     → 地刺高度等同大叔身高，寬度為大叔一半
     → 地刺升起 → 停留 0.5 秒 → 降下消失
     → 所有地刺消失後大叔恢復正常外觀
+
+黑球衝刺（每 4~5 秒）
+    → 大叔消失，變成帶刺黑球（8 根刺的球體）
+    → 在目標位置顯示橘色驚嘆號警示
+    → 黑球以 900 速度直線衝向玩家當前位置
+    → 衝刺過程中黑球高速旋轉
+    → 碰到邊界後大叔在當前位置重新現身
 
 地刺耐久度系統
     → 每根地刺有 10 HP
@@ -256,6 +269,83 @@ isHit（受擊硬直）
     → 受擊時擊退力減半
     → 攻擊期間停止移動
 ```
+
+#### 過載模式（HP < 200）— Overload Mode
+
+HP 降至 200 以下時觸發過載模式，大叔進入強化型態：
+
+```
+進入過載模式流程
+    → 螢幕震動 + 黑色閃爍
+    → 隱藏原始大叔 Sprite
+    → 生成「黑暗實體」一體化視覺容器
+        - 黑色圓角軀幹 + 深紫色紋路 + 核心十字圖案
+        - 肩膀黑刺（左右各 3 根）
+        - 頭頂黑刺（3 根向上發散）
+        - 下半身尖刺裙擺
+        - 大叔照片頭部（加深色 Tint）
+        - 紅色脈動眼睛
+        - 帶五指爪子的雙臂（含呼吸擺動動畫）
+    → 取消重力，改為漂浮狀態
+    → 碰撞箱放大（寬 1.5 倍、高 2 倍）
+    → 移動速度增加 50%
+    → 清除所有一般模式的攻擊與排程
+
+過載模式移動 AI
+    → 無重力漂浮
+    → 持續跟隨在玩家上方 150 像素處
+    → 平滑移動（速度 200）
+
+過載模式攻擊系統（1 秒嚴格冷卻）
+    → 每 1 秒從攻擊池中隨機選擇一種攻擊
+    → 1 秒冷卻時間是在攻擊「完全結束」後才開始計算
+    → 正在攻擊時不會計算冷卻
+    → 目前攻擊池包含：超級地刺、超級刺球、三角形導彈
+
+超級地刺（Super Spike）
+    → 雙手高舉 + 大叔往上飄移 150 像素
+    → 橘色半透明警告刺閃爍出現，覆蓋整個地面
+    → 預留安全區（玩家寬度的 1.5 倍），讓玩家有生存空間
+    → 警告持續 2 秒後消失
+    → 暗紅色超級地刺從地面猛烈升起（Back.easeOut 彈性效果）
+    → 地刺高度為地板到牆面的 4/5（幾乎佈滿畫面）
+    → 超級地刺 HP = 30（比一般地刺的 10 HP 耐打）
+    → 無敵穿越也無法閃過（碰到強制當機）
+    → 地刺停留 1.5 秒後降下
+    → 雙手放下並恢復呼吸擺動動畫
+
+超級刺球（Super Spike Ball）
+    → 蓄力：雙手往內縮（400ms）
+    → 釋放：雙手往外打開（200ms）
+    → 從大叔中心點往隨機 5 個向下角度各發射 1 顆刺球
+    → 4 顆黑色刺球 + 1 顆暗紅色特殊刺球
+    → 所有刺球高速旋轉飛行（直線，非追蹤彈）
+    → 速度隨機 400~700
+    → 碰到左右牆壁、地板或天花板後消失
+    → 暗紅色特殊刺球碰到邊界時「爆炸」
+        - 圓球部分消失
+        - 往 8 個方向散射暗紅色碎刺
+        - 碎刺以 600 速度直線飛行
+        - 碰到任何邊界後消失
+    → 碰到任何刺球或碎刺都會當機
+    → 釋放後雙手恢復呼吸擺動動畫
+
+三角形導彈（Triangle Missile）
+    → 將大叔身上的三角形物件（胸口十字紋、肩膀黑刺、頭頂黑刺、裙擺小刺、手臂小刺）瞬間拆卸
+    → 這些三角形會轉化為物理導彈，以 400~600 速度飛向玩家當前位置
+    → 導彈飛行過程中會帶有些微的混亂旋轉
+    → 碰到導彈會當機
+    → 導彈飛行 1.5 秒後消失
+    → 消失後，這些三角形會在 0.1 秒內從大叔身體中央飛回原位並放大至正常大小（長回來）
+```
+
+#### 過載模式受擊機制
+
+| 項目 | 一般模式 | 過載模式 |
+|------|----------|----------|
+| 擊退力減免 | ÷ 2 | ÷ 4 |
+| 攻擊中受擊 | 暫停移動、閃紅 | 僅閃紅（不打斷攻擊） |
+| 移動方式 | 地面追蹤 | 空中漂浮跟隨 |
 
 ---
 
@@ -304,19 +394,31 @@ isHit（受擊硬直）
 
 ### 猥瑣大叔攻擊系統
 
+#### 一般模式（HP ≥ 200）
 - **大槌攻擊**：每 2~4 秒，T 字形大槌揮擊地面並生成地刺
 - **召喚地刺**：每 5~6 秒，施法變黑，三組地刺依序從地面升起
+- **黑球衝刺**：每 4~5 秒，大叔變成帶刺黑球衝向玩家
 - **地刺耐久度**：10 HP，被子彈擊中逐漸變白後破碎，子彈同時消失
 - **攻擊佇列**：多重攻擊自動排隊，間隔 0.1 秒依序執行
 
+#### 過載模式（HP < 200）
+- **超級地刺**：全畫面暗紅色地刺（高度 4/5 畫面），僅留安全區（玩家 1.5 倍寬），HP 30
+- **超級刺球**：5 顆刺球散射，其中 1 顆暗紅色碰壁爆炸散射 8 根碎刺
+- **三角形導彈**：拆下身上的三角尖刺作為導彈飛向玩家，飛行 1.5 秒後消失並從身體中央花 0.1 秒長回來
+- **攻擊頻率**：每 1 秒嚴格冷卻，攻擊結束後才開始計算
+
 ### 死亡機制（BSOD）
 
-- 碰到 Boss 本體（蘿莉一般/狂暴模式、猥瑣大叔）→ 當機
+- 碰到 Boss 本體（蘿莉一般/狂暴模式、猥瑣大叔） → 當機
 - 碰到衝擊波 → 當機
 - 碰到彈跳球 → 當機
 - 碰到大槌或地刺 → 當機
+- 碰到黑球衝刺 → 當機
+- 碰到超級地刺 → 強制當機（無敵也無效）
+- 碰到超級刺球或爆炸碎刺 → 當機
+- 碰到三角形導彈 → 當機
 - 雷射打到玩家 → 當機
-- **衝刺無敵期間**，上述攻擊均無效（但無法穿越地刺）
+- **衝刺無敵期間**，上述攻擊均無效（但無法穿越地刺，超級地刺除外）
 
 ---
 
@@ -364,7 +466,10 @@ main.js
     │   └── boss/LoliAttacks.js    （部分 import，注意循環依賴）
     ├── boss/LoliAttacks.js
     │   └── boss/LoliStateMachine.js   （只 import bossState）
-    └── boss/UncleAttacks.js       （獨立模組，無循環依賴）
+    ├── boss/UncleStateMachine.js
+    │   └── boss/UncleAttacks.js       （import 攻擊啟停與清理函式）
+    └── boss/UncleAttacks.js
+        └── boss/UncleStateMachine.js  （只 import uncleState）
 ```
 
 > ⚠️ `LoliAttacks.js` 與 `LoliStateMachine.js` 之間存在**部分循環引用**。
@@ -372,9 +477,14 @@ main.js
 > `LoliStateMachine` import `LoliAttacks` 的函式。
 > 避免循環依賴的方式是透過 `initAttackRefs()` / `initBossRefs()` 在 `create` 階段注入物件參考，而非直接 import。
 
+> ⚠️ `UncleAttacks.js` 與 `UncleStateMachine.js` 之間也存在**部分循環引用**。
+> `UncleAttacks` 只 import `uncleState`（純資料物件），
+> `UncleStateMachine` import `UncleAttacks` 的攻擊啟停與清理函式。
+> 同樣透過 `initUncleRefs()` / `initUncleStateRefs()` 注入共享參考。
+
 ### 共享物件注入模式
 
-三個 Boss 模組均使用 `refs` 模式：
+四個 Boss 模組均使用 `refs` 模式：
 
 ```js
 let refs = {};
@@ -388,6 +498,7 @@ export function initXxxRefs(gameRefs) { refs = gameRefs; }
 initAttackRefs({ loli, player, shockwaves, lasers, enemyBalls });
 initBossRefs({ loli, player, lasers, enemyBalls, shockwaves, onLoliDeath });
 initUncleRefs({ uncle, uncleHPText, onUncleDeath, player, mgBullets, sgBullets, snBullets });
+initUncleStateRefs({ uncle, uncleHPText, onUncleDeath, player });
 ```
 
 ### 物理群組
@@ -430,8 +541,12 @@ initUncleRefs({ uncle, uncleHPText, onUncleDeath, player, mgBullets, sgBullets, 
 
 | 旗標 | 說明 |
 |------|------|
-| `isAttacking` | 正在執行攻擊（大槌或召喚地刺），期間停止移動 |
-| `isHit` | 受擊硬直中，擊退力減半 |
+| `isAttacking` | 正在執行攻擊（大槌、地刺、黑球衝刺或過載攻擊），期間停止移動 |
+| `isHit` | 受擊硬直中，擊退力減半（過載模式下再減半） |
+| `isOverload` | 是否處於過載模式（HP < 200 時觸發） |
+| `overloadContainer` | 過載模式的一體化視覺容器（Container） |
+| `overloadLimbs` | 過載模式的四肢引用 `{ armL_Group, armR_Group }` |
+| `moveSpeedMultiplier` | 移動速度倍率（過載模式為 1.5） |
 | `attackQueue` | 攻擊佇列陣列，儲存待執行的攻擊類型 |
 | `hammer` | 當前大槌 Graphics 物件參考 |
 | `spikes` | 當前所有地刺物件陣列 |
