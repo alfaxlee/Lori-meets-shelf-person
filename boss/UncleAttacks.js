@@ -1145,6 +1145,9 @@ export function spawnTriangleMissileAttack(scene) {
             const poly = scene.add.polygon(worldPos.x, worldPos.y, relPoints, def.color);
             poly.rotation = matrix.rotation;
             
+            // 設定白色邊框，讓三角形導彈在黑色背景中更容易被看見
+            poly.setStrokeStyle(2, 0xffffff, 1.0);
+            
             scene.physics.add.existing(poly);
             poly.body.allowGravity = false;
             

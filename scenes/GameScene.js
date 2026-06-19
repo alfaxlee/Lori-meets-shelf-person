@@ -45,8 +45,8 @@ function preloadAssets() {
     this.load.image('loliWin', './assets/images/蘿莉過關圖.png'); // 載入狂暴模式背景圖 (蘿莉過關圖)
     // 載入猥瑣大叔圖片
     this.load.image('猥瑣大叔', 'https://tse3.mm.bing.net/th/id/OIP.m_x1TY2hKDnQjwvLi8DWWAHaEK?r=0&rs=1&pid=ImgDetMain&o=7&rm=3');
-    // 載入猥瑣大叔過載模式背景圖
-    this.load.image('uncleOverloadBg', 'https://techwiser.com/wp-content/uploads/2025/12/Inspector-Rules-in-Scary-Shawarma-Kiosk-1024x620.webp');
+    // 載入猥瑣大叔過載模式背景圖 (本地資源以避免 CORS 載入失敗)
+    this.load.image('uncleOverloadBg', './assets/images/uncleOverloadBg.webp');
 }
 
 // 建立遊戲場景（由 GameScene.create 委派呼叫）
@@ -103,15 +103,9 @@ function createScene() {
 
     // 初始化狀態機與攻擊模組的共享參考
     initAttackRefs({ loli, player, shockwaves, lasers, enemyBalls });
-    // 傳入 onLoliDeath 回呼：蘿莉死亡後生成猥瑣大叔
+    // 傳入 onLoliDeath 回呼：蘿莉死亡後重生同一個蘿莉 (不再輪替)
     initBossRefs({ loli, player, lasers, enemyBalls, shockwaves, onLoliDeath: (scene) => {
-        // 隱藏蘿莉血量，顯示猥瑣大叔血量
-        showLoliHPText(false);
-        uncleHPText.setVisible(true);
-        // 在蘿莉出生位置生成猥瑣大叔
-        const spawnX = scene.cameras.main.width / 4;
-        const spawnY = scene.cameras.main.height - 150;
-        respawnUncle(scene, spawnX, spawnY);
+        respawnLoli(scene);
     }});
 
     this.physics.add.collider(player, platforms);
@@ -169,24 +163,28 @@ function createScene() {
     this.physics.add.overlap(player, shockwaves, triggerCrash); // 玩家碰到衝擊波也會當機
     this.physics.add.overlap(player, enemyBalls, triggerCrash); // 玩家碰到彈跳球也會當機
 
-    // 設定隨機雷射計時器 (3-7 秒觸發一次)
-    scheduleNextLaser(this);
-    // 設定跳躍攻擊計時器 (10-15 秒一次)
-    scheduleJumpAttack(this);
+    // 只有在選定挑戰的 Boss 是蘿莉時，才啟動蘿莉的專屬攻擊計時器
+    if (this.selectedBoss === 'loli') {
+        // 設定隨機雷射計時器 (3-7 秒觸發一次)
+        scheduleNextLaser(this);
+        // 設定跳躍攻擊計時器 (10-15 秒一次)
+        scheduleJumpAttack(this);
 
-
-    // 設定敵人彈跳球計時器 (一般模式頻率降低)
-    const scheduleNextBall = () => {
-        const delay = bossState.isBerserk ? 2000 : Phaser.Math.Between(15000, 25000); // 一般模式從 10-15s 增加到 15-25s (修改)
-        this.time.delayedCall(delay, () => {
-            // 僅在一般模式執行丟球攻擊，狂暴模式已依要求關閉 (修正)
-            if (!bossState.isBerserk) {
-                spawnEnemyBall(this);
-            }
-            scheduleNextBall();
-        });
-    };
-    scheduleNextBall();
+        // 設定敵人彈跳球計時器 (一般模式頻率降低)
+        const scheduleNextBall = () => {
+            // 額外檢查：如果玩家中途切換或 Boss 已不存在則不再排程
+            if (this.selectedBoss !== 'loli' || !loli.active) return;
+            const delay = bossState.isBerserk ? 2000 : Phaser.Math.Between(15000, 25000); // 一般模式從 10-15s 增加到 15-25s (修改)
+            this.time.delayedCall(delay, () => {
+                // 僅在一般模式執行丟球攻擊，狂暴模式已依要求關閉 (修正)
+                if (!bossState.isBerserk) {
+                    spawnEnemyBall(this);
+                }
+                scheduleNextBall();
+            });
+        };
+        scheduleNextBall();
+    }
 
     // 監聽視窗縮放事件，自動調整手機控制項位置 (新增)
     this.scale.on('resize', () => {
@@ -203,21 +201,29 @@ function createScene() {
     // HUD 介面建立（蘿莉血量文字 + 衝刺能量條）
     createHUD(this, bossState.hp);
     // 猥瑣大叔血量文字（初始隱藏，顯示在蘿莉血量下方）
-    uncleHPText = this.add.text(width / 2, 100, `猥瑣大叔血量: 800`, { fontSize: '30px', fill: '#ff00ff', fontStyle: 'bold', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5, 0);
+    uncleHPText = this.add.text(width / 2, 100, `猥瑣大叔血量: 800`, { 
+        fontSize: '30px', 
+        fill: '#ff00ff', 
+        fontStyle: 'bold', 
+        stroke: '#000', 
+        strokeThickness: 4,
+        padding: { left: 10, right: 10, top: 8, bottom: 8 } // 加上 padding 避免描邊與字頂被截斷 (修改)
+    }).setOrigin(0.5, 0);
     uncleHPText.setVisible(false); // 初始隱藏
     // 初始化猥瑣大叔狀態機參考
     initUncleStateRefs({ uncle, uncleHPText, onUncleDeath: (scene) => {
-        uncleHPText.setVisible(false);
-        showLoliHPText(true);
-        respawnLoli(scene);
+        // 擊敗大叔後在大叔左側出生點直接重生大叔 (不再輪替)
+        const spawnX = scene.cameras.main.width / 4;
+        const spawnY = scene.cameras.main.height - 150;
+        respawnUncle(scene, spawnX, spawnY);
     }, player, mgBullets, sgBullets, snBullets });
 
     // 初始化猥瑣大叔攻擊模組參考
     initUncleRefs({ uncle, uncleHPText, onUncleDeath: (scene) => {
-        // 這裡的邏輯與上面的 initUncleStateRefs 相同，確保一致性
-        uncleHPText.setVisible(false);
-        showLoliHPText(true);
-        respawnLoli(scene);
+        // 擊敗大叔後直接重生大叔 (保持一致性)
+        const spawnX = scene.cameras.main.width / 4;
+        const spawnY = scene.cameras.main.height - 150;
+        respawnUncle(scene, spawnX, spawnY);
     }, player, mgBullets, sgBullets, snBullets });
 
     // 蘿莉的子彈碰撞
@@ -237,6 +243,25 @@ function createScene() {
         reload: Phaser.Input.Keyboard.KeyCodes.R,
         dash: Phaser.Input.Keyboard.KeyCodes.Q
     });
+
+    // 根據選定要挑战的 Boss 進行分支初始化 (若大叔局則隱藏蘿莉並生成大叔)
+    if (this.selectedBoss === 'uncle') {
+        // 隱藏並完全停用蘿莉
+        loli.setActive(false);
+        loli.setVisible(false);
+        loli.body.enable = false;
+
+        // 隱藏蘿莉 HP，顯示大叔 HP，並直接生成大叔在左側
+        showLoliHPText(false);
+        uncleHPText.setVisible(true);
+        const spawnX = width / 4;
+        const spawnY = height - 150;
+        respawnUncle(this, spawnX, spawnY);
+    } else {
+        // 預設為蘿莉局：顯示蘿莉 HP，大叔保持隱藏與停用
+        showLoliHPText(true);
+        uncleHPText.setVisible(false);
+    }
 }
 
 // setupMobileControls / createBtn / repositionMobileControls 已搬移至 ui/MobileControls.js
@@ -389,6 +414,11 @@ function createDashShield(scene, player, angle) {
 export class GameScene extends Phaser.Scene {
     constructor() {
         super('GameScene'); // 場景名稱
+    }
+
+    // 初始化階段，接收並存儲來自前一場景傳入的選定 Boss
+    init(data) {
+        this.selectedBoss = data.selectedBoss || 'loli';
     }
 
     // 載入素材階段

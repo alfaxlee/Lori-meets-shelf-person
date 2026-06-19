@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>遊戲說明文件 - 蘿莉遇櫃人</title>
+    <!-- 引入 GitHub 樣式的 Markdown CSS (深色主題) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown.min.css">
+    <!-- 引入 Marked.js 用以解析 Markdown 文本 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body {
+            box-sizing: border-box;
+            min-width: 200px;
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 45px;
+            background-color: #0d1117; /* 與 GitHub 暗黑模式一致的底色 */
+        }
+        .markdown-body {
+            background-color: #0d1117;
+            color: #c9d1d9;
+        }
+        /* 響應式手機版間距微調 */
+        @media (max-width: 767px) {
+            body {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body class="markdown-body">
+    <!-- 用來放置渲染後 HTML 的容器 -->
+    <div id="content">說明文件載入中，請稍候...</div>
+
+    <script>
+        // 使用 fetch 非同步讀取本地的 README.md 檔案
+        fetch('./README.md')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('找不到 README.md 檔案');
+                }
+                return response.text();
+            })
+            .then(markdownText => {
+                // 使用 marked.js 將 markdown 字串編譯為 HTML 並寫入容器
+                document.getElementById('content').innerHTML = marked.parse(markdownText);
+            })
+            .catch(error => {
+                // 若讀取失敗，顯示錯誤訊息
+                document.getElementById('content').innerHTML = '<h1>載入失敗</h1><p>' + error.message + '</p>';
+            });
+    </script>
+</body>
+</html>

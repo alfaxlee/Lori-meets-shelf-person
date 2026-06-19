@@ -23,9 +23,30 @@ export function getWeaponState() { return weapons; }
 export function createWeaponUI(scene) {
     const w = weapons;
     const width = scene.cameras.main.width;
-    mgText = scene.add.text(20, 20, `Slingshot: ${w.mg.ammo}/${w.mg.maxAmmo}`, { fontSize: '20px', fill: '#ffff00', fontStyle: 'bold', stroke: '#000', strokeThickness: 3 });
-    sgText = scene.add.text(width - 20, 20, `Shotgun: ${w.sg.ammo}/${w.sg.maxAmmo}`, { fontSize: '20px', fill: '#00ff00', fontStyle: 'bold', stroke: '#000', strokeThickness: 3 }).setOrigin(1, 0);
-    snText = scene.add.text(width / 2, 20, `Sniper: ${w.sn.ammo}/${w.sn.maxAmmo}`, { fontSize: '20px', fill: '#00ffff', fontStyle: 'bold', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5, 0);
+    mgText = scene.add.text(20, 20, `Slingshot: ${w.mg.ammo}/${w.mg.maxAmmo}`, { 
+        fontSize: '20px', 
+        fill: '#ffff00', 
+        fontStyle: 'bold', 
+        stroke: '#000', 
+        strokeThickness: 3,
+        padding: { left: 4, right: 4, top: 4, bottom: 4 } // 加上 padding 避免文字頂部截斷 (修改)
+    });
+    sgText = scene.add.text(width - 20, 20, `Shotgun: ${w.sg.ammo}/${w.sg.maxAmmo}`, { 
+        fontSize: '20px', 
+        fill: '#00ff00', 
+        fontStyle: 'bold', 
+        stroke: '#000', 
+        strokeThickness: 3,
+        padding: { left: 4, right: 4, top: 4, bottom: 4 } // 加上 padding 避免文字頂部截斷 (修改)
+    }).setOrigin(1, 0);
+    snText = scene.add.text(width / 2, 20, `Sniper: ${w.sn.ammo}/${w.sn.maxAmmo}`, { 
+        fontSize: '20px', 
+        fill: '#00ffff', 
+        fontStyle: 'bold', 
+        stroke: '#000', 
+        strokeThickness: 3,
+        padding: { left: 4, right: 4, top: 4, bottom: 4 } // 加上 padding 避免文字頂部截斷 (修改)
+    }).setOrigin(0.5, 0);
 }
 
 /**

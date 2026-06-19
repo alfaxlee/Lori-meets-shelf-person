@@ -12,7 +12,14 @@ let energyBar;   // 衝刺能量條 Graphics
  */
 export function createHUD(scene, loliHP) {
     const width = scene.cameras.main.width;
-    loliHPText = scene.add.text(width / 2, 60, `蘿莉血量: ${loliHP}`, { fontSize: '30px', fill: '#ff0000', fontStyle: 'bold', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5, 0);
+    loliHPText = scene.add.text(width / 2, 60, `蘿莉血量: ${loliHP}`, { 
+        fontSize: '30px', 
+        fill: '#ff0000', 
+        fontStyle: 'bold', 
+        stroke: '#000', 
+        strokeThickness: 4,
+        padding: { left: 10, right: 10, top: 8, bottom: 8 } // 加上 padding 避免描邊與字頂被截斷 (修改)
+    }).setOrigin(0.5, 0);
     energyBar = scene.add.graphics();
 }
 

@@ -1,8 +1,16 @@
 /* 基本樣式重置 */
-body {
+html, body {
     margin: 0;
     padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden; /* 隱藏瀏覽器滾動條 */
     background-color: white;
+}
+
+/* 消除 Canvas 內聯元素預設的底邊空隙 */
+canvas {
+    display: block;
 }
 
 /* 當機畫面 (BSOD) 樣式 - 支援響應式 */
