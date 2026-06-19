@@ -45,6 +45,8 @@ function preloadAssets() {
     this.load.image('loliWin', './assets/images/蘿莉過關圖.png'); // 載入狂暴模式背景圖 (蘿莉過關圖)
     // 載入猥瑣大叔圖片
     this.load.image('猥瑣大叔', 'https://tse3.mm.bing.net/th/id/OIP.m_x1TY2hKDnQjwvLi8DWWAHaEK?r=0&rs=1&pid=ImgDetMain&o=7&rm=3');
+    // 載入猥瑣大叔過載模式背景圖
+    this.load.image('uncleOverloadBg', 'https://techwiser.com/wp-content/uploads/2025/12/Inspector-Rules-in-Scary-Shawarma-Kiosk-1024x620.webp');
 }
 
 // 建立遊戲場景（由 GameScene.create 委派呼叫）

@@ -57,6 +57,12 @@ function enterOverloadMode(scene) {
     // === 隱藏原本的大叔 Sprite（物理碰撞體仍然存在） ===
     refs.uncle.setVisible(false);
 
+    // === 建立過載模式背景圖 ===
+    const width = scene.cameras.main.width;
+    const height = scene.cameras.main.height;
+    scene.uncleOverloadBg = scene.add.image(width / 2, height / 2, 'uncleOverloadBg').setDepth(-1);
+    scene.uncleOverloadBg.setDisplaySize(width, height);
+
     // === 建立過載模式的一體化視覺容器 ===
     // 所有部件（頭、軀幹、四肢、刺、眼睛）全部放入同一個 Container
     const container = scene.add.container(refs.uncle.x, refs.uncle.y);
@@ -305,6 +311,12 @@ export function handleUncleHit(scene, bullet, force, stunTime, damage, originX, 
             uncleState.overloadLimbs = null;
         }
 
+        // 清理過載模式背景圖
+        if (scene.uncleOverloadBg) {
+            scene.uncleOverloadBg.destroy();
+            scene.uncleOverloadBg = null;
+        }
+
         uncleState.isAttacking = false;
         uncleState.attackQueue = [];
         cleanupHammer();
@@ -352,6 +364,12 @@ export function respawnUncle(scene, x, y) {
         uncleState.overloadContainer.destroy();
         uncleState.overloadContainer = null;
         uncleState.overloadLimbs = null;
+    }
+
+    // 清理過載模式背景圖
+    if (scene.uncleOverloadBg) {
+        scene.uncleOverloadBg.destroy();
+        scene.uncleOverloadBg = null;
     }
 
     if (refs.uncleHPText) refs.uncleHPText.setText(`猥瑣大叔血量: ${uncleState.hp}`);
