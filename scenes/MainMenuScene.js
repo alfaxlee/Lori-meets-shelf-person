@@ -55,36 +55,52 @@ export class MainMenuScene extends Phaser.Scene {
             this.events.off('update', updateParticles);
         });
 
-        // 建立遊戲大標題 (黃金色描邊與發光陰影)
-        const title = this.add.text(width / 2, height / 3 - 20, '蘿 莉 遇 櫃 人', {
-            fontSize: '76px',
+        // 建立大標題 Container，用以整合標題文字與金色底線，使其共同上下浮動 (修改)
+        const titleContainer = this.add.container(width / 2, height / 3 - 35);
+
+        // 建立遊戲大標題文字 (放大至 110px，增強金色描邊與發光效果)
+        const title = this.add.text(0, 0, '蘿 莉 遇 櫃 人', {
+            fontSize: '110px',
             fill: '#ffffff',
             fontStyle: 'bold',
             stroke: '#d4af37', // 經典黃金色
-            strokeThickness: 5,
-            padding: { left: 20, right: 20, top: 20, bottom: 20 }, // 加上 padding 防止金色描邊與發光被截斷
+            strokeThickness: 7, // 加粗描邊
+            padding: { left: 40, right: 40, top: 40, bottom: 40 }, // 大幅增加 padding 防止金色發光外框被截斷
             shadow: {
                 color: '#ffb700', // 金黃色發光
                 fill: true,
                 offsetX: 0,
                 offsetY: 0,
-                blur: 25
+                blur: 30 // 加強模糊半徑
             }
         }).setOrigin(0.5);
 
         // 標題下方的金色漸層精緻分割線
         const line = this.add.graphics();
         line.fillGradientStyle(0x000000, 0xd4af37, 0x000000, 0xd4af37, 1);
-        line.fillRect(width / 2 - 250, height / 3 + 45, 500, 3);
+        line.fillRect(-250, 75, 500, 4); // 相對座標定位在標題下方
+
+        titleContainer.add([title, line]);
+
+        // 建立標題組平滑的呼吸式上下浮動特效
+        this.tweens.add({
+            targets: titleContainer,
+            y: height / 3 - 50, // 向上微幅浮動 15 像素
+            duration: 2500,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
 
         // 建立「開始遊戲」按鈕
         this.createButton(width / 2, height / 2 + 30, '開始遊戲', () => {
             this.scene.start('BossSelectScene');
         });
 
-        // 建立「查看README.md」按鈕
-        this.createButton(width / 2, height / 2 + 115, '查看README.MD', () => {
-            window.open('./readme.html', '_blank');
+        // 建立「查看規則」按鈕
+        this.createButton(width / 2, height / 2 + 115, '查看規則', () => {
+            // 將 _blank 改為固定視窗名稱 'game_rules_window'，確保在相同分頁中載入最新內容，避免多次點擊開啟一堆新分頁 (修改)
+            window.open('./readme.html?v=' + Date.now(), 'game_rules_window');
         });
     }
 

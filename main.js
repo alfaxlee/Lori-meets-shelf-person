@@ -1,7 +1,6 @@
-// === 遊戲主入口 ===
-// 負責建立 Phaser 遊戲設定並啟動遊戲
-import { GameScene } from './scenes/GameScene.js';
-import { MainMenuScene, BossSelectScene } from './scenes/MainMenuScene.js';
+// 引入遊戲場景，加入版本號以強迫瀏覽器重新載入，防止快取舊的場景檔案 (修改)
+import { GameScene } from './scenes/GameScene.js?v=2.0.1';
+import { MainMenuScene, BossSelectScene } from './scenes/MainMenuScene.js?v=2.0.1';
 
 // 動態計算邏輯寬度，保持邏輯高度為 720 像素，並依瀏覽器比例延伸空間與地板（寬度至少 1280）
 const dynamicWidth = Math.max(1280, 720 * (window.innerWidth / window.innerHeight));

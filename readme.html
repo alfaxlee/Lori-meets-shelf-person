@@ -4,52 +4,224 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>遊戲說明文件 - 蘿莉遇櫃人</title>
-    <!-- 引入 GitHub 樣式的 Markdown CSS (深色主題) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown.min.css">
-    <!-- 引入 Marked.js 用以解析 Markdown 文本 -->
+    <!-- 引入 GitHub 暗色主題 Markdown CSS（必須用 dark 版本，避免淺色文字導致全黑） -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown-dark.min.css">
+    <!-- 引入 Marked.js 解析 Markdown -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        body {
-            box-sizing: border-box;
-            min-width: 200px;
-            max-width: 980px;
-            margin: 0 auto;
-            padding: 45px;
-            background-color: #0d1117; /* 與 GitHub 暗黑模式一致的底色 */
+        /* ===== 基礎頁面樣式 ===== */
+        html {
+            scroll-behavior: smooth; /* 目錄錨點平滑滾動 */
         }
-        .markdown-body {
-            background-color: #0d1117;
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0d1117; /* GitHub 深色底 */
             color: #c9d1d9;
         }
-        /* 響應式手機版間距微調 */
-        @media (max-width: 767px) {
-            body {
-                padding: 15px;
-            }
+        /* Markdown 內容區域排版 */
+        .markdown-body {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 40px 24px;
+        }
+
+        /* ===== 「蘿莉遇櫃人」大標題金色特效 ===== */
+        .markdown-body h1 {
+            font-size: clamp(36px, 5.4vw, 100px) !important;
+            text-align: center !important;
+            margin: 0 auto 16px auto !important;
+            padding: 12px 0 !important;
+            line-height: 1.4 !important;
+            border-bottom: 2px solid #d4af37 !important;
+            /* 金色漸層文字 */
+            background: linear-gradient(to right, #ffffff, #d4af37) !important;
+            -webkit-background-clip: text !important;
+            -webkit-text-fill-color: transparent !important;
+            text-shadow: 0 0 15px rgba(212, 175, 55, 0.4);
+        }
+
+        /* ===== 重要澄清彈窗遮罩 ===== */
+        #overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        /* 彈窗卡片 */
+        #popup {
+            background: #161b22;
+            border: 2px solid #8957e5;
+            border-radius: 12px;
+            max-width: 520px;
+            width: 90%;
+            padding: 28px;
+            text-align: center;
+            color: #c9d1d9;
+        }
+        #popup h2 {
+            font-size: 18px;
+            color: #ffb700;
+            margin: 0 0 16px 0;
+        }
+        #popup .body {
+            font-size: 14px;
+            line-height: 1.65;
+            text-align: left;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        #popup code {
+            background: rgba(110,118,129,0.35);
+            padding: 2px 5px;
+            border-radius: 4px;
+            color: #f85149;
+        }
+
+        /* ===== 3 秒進度填色按鈕 ===== */
+        #confirmBtn {
+            position: relative;
+            display: inline-block;
+            padding: 12px 36px;
+            font-size: 15px;
+            font-weight: 600;
+            color: #8b949e;
+            background: #21262d;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            cursor: not-allowed;
+            overflow: hidden;
+            outline: none;
+        }
+        /* 按鈕文字置於填色上方 */
+        #confirmBtn span {
+            position: relative;
+            z-index: 2;
+        }
+        /* 從左到右填色的偽元素 */
+        #confirmBtn::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 0;
+            height: 100%;
+            background: linear-gradient(135deg, #8957e5, #58a6ff);
+            z-index: 1;
+        }
+        /* 動畫播放中 */
+        #confirmBtn.filling::before {
+            animation: fill 3s linear forwards;
+        }
+        @keyframes fill {
+            to { width: 100%; }
+        }
+        /* 3 秒後可點擊狀態 */
+        #confirmBtn.ready {
+            cursor: pointer;
+            color: #fff;
+            border-color: transparent;
+        }
+        #confirmBtn.ready::before {
+            width: 100%;
+        }
+
+        /* ===== 內容預設隱藏 ===== */
+        #content {
+            display: none;
         }
     </style>
 </head>
-<body class="markdown-body">
-    <!-- 用來放置渲染後 HTML 的容器 -->
-    <div id="content">說明文件載入中，請稍候...</div>
+<body>
+
+    <!-- 重要澄清彈窗 -->
+    <div id="overlay">
+        <div id="popup">
+            <h2>⚠️ 重要澄清 / IMPORTANT</h2>
+            <div class="body">
+                <p><strong>重要澄清</strong>：本專案資料夾名稱為 <code>curseforge</code>，但此 <strong><code>curseforge</code> 並非大家所想的那個 Minecraft 模組下載/管理應用程式 (CurseForge)</strong>！</p>
+                <p>這只是當初建立專案時，直接拿隨手建的資料夾來使用且忘記修改名稱而已，請大家不要誤會喔！</p>
+            </div>
+            <button id="confirmBtn" type="button" disabled>
+                <span>我已閱讀並瞭解 (3s)</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Markdown 渲染容器（預設隱藏） -->
+    <div id="content" class="markdown-body">載入中…</div>
 
     <script>
-        // 使用 fetch 非同步讀取本地的 README.md 檔案
-        fetch('./README.md')
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('找不到 README.md 檔案');
+        // ===== 1. 載入並渲染 README.md =====
+        if (typeof marked !== 'undefined') {
+            // 自訂 heading renderer，產生正確的中文錨點 ID（與目錄連結吻合）
+            const renderer = {
+                heading(arg1, arg2, arg3) {
+                    let text, level, raw;
+                    // 相容 marked.js 新舊版本
+                    if (arg1 && typeof arg1 === 'object') {
+                        text = arg1.text; level = arg1.level; raw = arg1.raw;
+                    } else {
+                        text = arg1; level = arg2; raw = arg3;
+                    }
+                    const src = (raw || text || '').toString();
+                    // 產生與 GitHub 一致的 slug：小寫、空格轉 -、移除括號與標點
+                    const id = src.toLowerCase().trim()
+                        .replace(/\s+/g, '-')
+                        .replace(/[()（）「」\[\]{}?!.,;:：，。；+=%$#@`~*]/g, '')
+                        .replace(/[^\w\u4e00-\u9fa5-]/g, '');
+                    return '<h' + level + ' id="' + id + '">' + text + '</h' + level + '>';
                 }
-                return response.text();
-            })
-            .then(markdownText => {
-                // 使用 marked.js 將 markdown 字串編譯為 HTML 並寫入容器
-                document.getElementById('content').innerHTML = marked.parse(markdownText);
-            })
-            .catch(error => {
-                // 若讀取失敗，顯示錯誤訊息
-                document.getElementById('content').innerHTML = '<h1>載入失敗</h1><p>' + error.message + '</p>';
-            });
+            };
+            marked.use({ renderer: renderer });
+
+            // 讀取 README.md（附帶時間戳防快取）
+            fetch('./README.md?t=' + Date.now())
+                .then(function(r) { return r.ok ? r.text() : Promise.reject('找不到 README.md'); })
+                .then(function(md) {
+                    document.getElementById('content').innerHTML = marked.parse(md);
+                })
+                .catch(function(e) {
+                    document.getElementById('content').innerHTML = '<h1>載入失敗</h1><p>' + e + '</p>';
+                });
+        }
+
+        // ===== 2. 三秒倒數與彈窗邏輯 =====
+        var btn = document.getElementById('confirmBtn');
+        var btnText = btn.querySelector('span');
+        var remaining = 3;
+
+        // 開始填色動畫
+        btn.classList.add('filling');
+
+        // 每秒更新倒數文字
+        var timer = setInterval(function() {
+            remaining--;
+            if (remaining > 0) {
+                btnText.textContent = '我已閱讀並瞭解 (' + remaining + 's)';
+            } else {
+                clearInterval(timer);
+                btnText.textContent = '我已閱讀並瞭解';
+                btn.disabled = false;
+                btn.classList.remove('filling');
+                btn.classList.add('ready');
+            }
+        }, 1000);
+
+        // 按鈕點擊：移除遮罩、顯示內容
+        btn.addEventListener('click', function() {
+            if (btn.disabled) return;
+            // 直接從 DOM 刪除遮罩，乾淨俐落
+            document.getElementById('overlay').remove();
+            // 顯示說明文件
+            document.getElementById('content').style.display = 'block';
+        });
     </script>
 </body>
 </html>
