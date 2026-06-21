@@ -323,6 +323,15 @@ export function handleUncleHit(scene, bullet, force, stunTime, damage, originX, 
         cleanupAllSpikes();
         cleanupBallRush();
 
+        scene.children.list.slice().forEach(child => {
+            if (child.name === 'warningLine' || child.name === 'warning') {
+                child.destroy();
+            }
+            if (child.type === 'Text' && child.text === '!') {
+                child.destroy();
+            }
+        });
+
         scene.time.delayedCall(3000, () => {
             if (refs.onUncleDeath) {
                 refs.onUncleDeath(scene);

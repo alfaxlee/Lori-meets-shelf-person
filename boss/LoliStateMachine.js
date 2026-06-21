@@ -48,6 +48,15 @@ export function handleLoliDeath(scene) {
     scene.cameras.main.flash(500, 255, 0, 0);
     clearAllAttacks(scene);
 
+    scene.children.list.slice().forEach(child => {
+        if (child.name === 'warningLine' || child.name === 'warning') {
+            child.destroy();
+        }
+        if (child.type === 'Text' && child.text === '!') {
+            child.destroy();
+        }
+    });
+
     // 立即重置狂暴相關狀態與場景物件
     bossState.isBerserk = false;
     bossState.isSuperInvincible = false;

@@ -579,6 +579,7 @@ export function spawnBallRushAttack(scene) {
             strokeThickness: 4
         }
     ).setOrigin(0.5).setDepth(20);
+    exclamation.name = 'warning';
 
     scene.tweens.add({
         targets: exclamation,
@@ -718,6 +719,7 @@ export function spawnSuperSpikeAttack(scene) {
                 { x: spikeWidth / 2, y: 0 },
                 { x: spikeWidth, y: spikeHeight }
             ], 0xffa500); 
+            warningSpike.name = 'warning';
             
             warningSpike.setAlpha(0.6); 
             

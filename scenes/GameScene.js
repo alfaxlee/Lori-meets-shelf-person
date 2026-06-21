@@ -21,6 +21,7 @@ let sgBullets;
 let snBullets;
 let uncle;         // 猥瑣大叔 Sprite
 let uncleHPText;   // 猥瑣大叔血量文字
+let dora;          // 哆啦噩夢 Sprite
 
 // --- 武器系統變數 --- (已搬移至 weapons/WeaponManager.js)
 let shockwaves; // 衝擊波群組
@@ -47,6 +48,8 @@ function preloadAssets() {
     this.load.image('猥瑣大叔', 'https://tse3.mm.bing.net/th/id/OIP.m_x1TY2hKDnQjwvLi8DWWAHaEK?r=0&rs=1&pid=ImgDetMain&o=7&rm=3');
     // 載入猥瑣大叔過載模式背景圖 (本地資源以避免 CORS 載入失敗)
     this.load.image('uncleOverloadBg', './assets/images/uncleOverloadBg.webp');
+    // 載入哆啦噩夢圖片
+    this.load.image('dora', './assets/images/哆啦噩夢.png');
 }
 
 // 建立遊戲場景（由 GameScene.create 委派呼叫）
@@ -101,6 +104,16 @@ function createScene() {
     uncle.setVisible(false);
     uncle.body.enable = false;
 
+    // 建立哆啦噩夢
+    dora = this.physics.add.sprite(3 * width / 4, height - 110, 'dora');
+    // 使用 setDisplaySize 確保視覺大小與碰撞箱跟蘿莉完全一致（不依賴原圖尺寸）
+    dora.setDisplaySize(loli.displayWidth, loli.displayHeight);
+    dora.setCollideWorldBounds(true);
+    dora.setBounce(0.1);
+    dora.setActive(false);
+    dora.setVisible(false);
+    dora.body.enable = false;
+
     // 初始化狀態機與攻擊模組的共享參考
     initAttackRefs({ loli, player, shockwaves, lasers, enemyBalls });
     // 傳入 onLoliDeath 回呼：蘿莉死亡後重生同一個蘿莉 (不再輪替)
@@ -111,6 +124,12 @@ function createScene() {
     this.physics.add.collider(player, platforms);
     this.physics.add.collider(loli, platforms);
     this.physics.add.collider(uncle, platforms); // 猥瑣大叔與地板碰撞
+    this.physics.add.collider(dora, platforms);  // 哆啦噩夢與地板碰撞
+
+    // 哆啦噩夢的子彈碰撞 (只會摧毀子彈，目前無受傷邏輯)
+    this.physics.add.collider(dora, [mgBullets, sgBullets, snBullets], (boss, bullet) => {
+        bullet.destroy();
+    });
 
     // 子彈碰撞邏輯
     this.physics.add.collider(mgBullets, platforms);
@@ -158,6 +177,10 @@ function createScene() {
     });
     // 碰到猥瑣大叔也會當機
     this.physics.add.collider(player, uncle, () => {
+        triggerCrash();
+    });
+    // 碰到哆啦噩夢也會當機
+    this.physics.add.collider(player, dora, () => {
         triggerCrash();
     });
     this.physics.add.overlap(player, shockwaves, triggerCrash); // 玩家碰到衝擊波也會當機
@@ -244,12 +267,11 @@ function createScene() {
         dash: Phaser.Input.Keyboard.KeyCodes.Q
     });
 
-    // 根據選定要挑战的 Boss 進行分支初始化 (若大叔局則隱藏蘿莉並生成大叔)
+    // 根據選定要挑战的 Boss 進行分支初始化
     if (this.selectedBoss === 'uncle') {
-        // 隱藏並完全停用蘿莉
-        loli.setActive(false);
-        loli.setVisible(false);
-        loli.body.enable = false;
+        // 隱藏並完全停用蘿莉與哆啦噩夢
+        loli.setActive(false); loli.setVisible(false); loli.body.enable = false;
+        dora.setActive(false); dora.setVisible(false); dora.body.enable = false;
 
         // 隱藏蘿莉 HP，顯示大叔 HP，並直接生成大叔在左側
         showLoliHPText(false);
@@ -257,10 +279,25 @@ function createScene() {
         const spawnX = width / 4;
         const spawnY = height - 150;
         respawnUncle(this, spawnX, spawnY);
+    } else if (this.selectedBoss === 'dora') {
+        // 隱藏蘿莉與大叔
+        loli.setActive(false); loli.setVisible(false); loli.body.enable = false;
+        uncle.setActive(false); uncle.setVisible(false); uncle.body.enable = false;
+        
+        showLoliHPText(false);
+        uncleHPText.setVisible(false);
+        
+        dora.setActive(true);
+        dora.setVisible(true);
+        dora.body.enable = true;
+        dora.setPosition(width / 4, height - 110);
+        dora.body.allowGravity = true;
+        // 移除 setImmovable(true) 讓物理引擎能自動將他推出地板，玩家撞到會直接死掉所以也不怕被推動
     } else {
-        // 預設為蘿莉局：顯示蘿莉 HP，大叔保持隱藏與停用
+        // 預設為蘿莉局：顯示蘿莉 HP，大叔與哆啦噩夢保持隱藏與停用
         showLoliHPText(true);
         uncleHPText.setVisible(false);
+        dora.setActive(false); dora.setVisible(false); dora.body.enable = false;
     }
 }
 
