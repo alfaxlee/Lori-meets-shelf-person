@@ -84,7 +84,13 @@ export function fireMG(scene, player, loli, bulletGroup, pointer, autoAim) {
     let angle = autoAim ? Phaser.Math.Angle.Between(player.x, player.y, loli.x, loli.y) : Phaser.Math.Angle.Between(player.x, player.y, pointer.x, pointer.y);
     const bullet = bulletGroup.create(player.x + Math.cos(angle) * 40, player.y + Math.sin(angle) * 40, 'shabi');
     if (bullet) {
-        bullet.setScale(0.05).setVelocity(Math.cos(angle) * 1200, Math.sin(angle) * 1200).setCollideWorldBounds(true).setBounce(1);
+        // 若哆啦噩夢的領域展開啟動，子彈速度變為0.5倍
+        const speedMult = scene.isDoraDomainActive ? 0.5 : 1.0;
+        bullet.setScale(0.05).setVelocity(Math.cos(angle) * 1200 * speedMult, Math.sin(angle) * 1200 * speedMult).setCollideWorldBounds(true).setBounce(1);
+        // 若哆啦噩夢的領域展開啟動，子彈重力變為原本的 0.25 倍（以維持原有飛行軌跡）
+        if (scene.isDoraDomainActive) {
+            bullet.body.gravity.y = -750;
+        }
         bullet.body.onWorldBounds = true; w.ammo--; mgText.setText(`Slingshot: ${w.ammo}/${w.maxAmmo}`);
         if (w.ammo <= 0) triggerReload(scene, 'mg');
     }
@@ -97,11 +103,13 @@ export function fireSG(scene, player, loli, bulletGroup, pointer, autoAim) {
     const w = weapons.sg;
     let centerAngle = autoAim ? Phaser.Math.Angle.Between(player.x, player.y, loli.x, loli.y) : Phaser.Math.Angle.Between(player.x, player.y, pointer.x, pointer.y);
     const spread = Phaser.Math.DegToRad(18);
+    // 若哆啦噩夢的領域展開啟動，子彈速度變為0.5倍
+    const speedMult = scene.isDoraDomainActive ? 0.5 : 1.0;
     for (let i = -2; i <= 2; i++) {
         const angle = centerAngle + (i * spread);
         const bullet = bulletGroup.create(player.x + Math.cos(angle) * 40, player.y + Math.sin(angle) * 40, 'shabi');
         if (bullet) {
-            bullet.setScale(0.05).setVelocity(Math.cos(angle) * 700, Math.sin(angle) * 700).body.allowGravity = false;
+            bullet.setScale(0.05).setVelocity(Math.cos(angle) * 700 * speedMult, Math.sin(angle) * 700 * speedMult).body.allowGravity = false;
             bullet.setCollideWorldBounds(true).setBounce(0.9); bullet.body.onWorldBounds = true;
         }
     }
@@ -118,7 +126,9 @@ export function fireSN(scene, player, loli, bulletGroup, pointer, autoAim) {
     let angle = autoAim ? Phaser.Math.Angle.Between(player.x, player.y, loli.x, loli.y) : Phaser.Math.Angle.Between(player.x, player.y, pointer.x, pointer.y);
     const bullet = bulletGroup.create(player.x + Math.cos(angle) * 40, player.y + Math.sin(angle) * 40, 'shabi');
     if (bullet) {
-        bullet.setScale(0.1, 0.025).setRotation(angle).setVelocity(Math.cos(angle) * 1500, Math.sin(angle) * 1500).body.allowGravity = false;
+        // 若哆啦噩夢的領域展開啟動，子彈速度變為0.5倍
+        const speedMult = scene.isDoraDomainActive ? 0.5 : 1.0;
+        bullet.setScale(0.1, 0.025).setRotation(angle).setVelocity(Math.cos(angle) * 1500 * speedMult, Math.sin(angle) * 1500 * speedMult).body.allowGravity = false;
         bullet.setCollideWorldBounds(true); bullet.body.onWorldBounds = true; w.ammo--; snText.setText(`Sniper: ${w.ammo}/${w.maxAmmo}`);
         if (w.ammo <= 0) triggerReload(scene, 'sn');
     }

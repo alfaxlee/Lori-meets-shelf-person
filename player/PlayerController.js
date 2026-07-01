@@ -18,10 +18,10 @@ export const playerState = {
  * 每幀更新玩家邏輯 (包含移動與衝刺)
  * @param {Phaser.Scene} scene - 遊戲場景
  * @param {Phaser.GameObjects.Sprite} player - 玩家 Sprite
- * @param {Phaser.GameObjects.Sprite} loli - 蘿莉 Sprite (用於自動瞄準衝刺)
+ * @param {Phaser.GameObjects.Sprite} boss - 當前 Boss Sprite (用於自動瞄準衝刺)
  * @param {Function} createDashShieldFn - 產生護盾的 callback
  */
-export function updatePlayer(scene, player, loli, createDashShieldFn) {
+export function updatePlayer(scene, player, boss, createDashShieldFn) {
     const s = playerState;
 
     if (s.dashEnergy < s.maxDashEnergy) {
@@ -38,13 +38,21 @@ export function updatePlayer(scene, player, loli, createDashShieldFn) {
 
             let angle;
             let speed = 2400; 
+            // 如果哆啦噩夢的領域展開啟動，衝刺速度減半
+            if (scene.isDoraDomainActive) {
+                speed *= 0.5;
+            }
             if (mobileInput.dash) {
-                angle = Phaser.Math.Angle.Between(loli.x, loli.y, player.x, player.y);
+                angle = Phaser.Math.Angle.Between(boss.x, boss.y, player.x, player.y);
             } else {
                 const mousePointer = scene.input.activePointer;
                 angle = Phaser.Math.Angle.Between(player.x, player.y, mousePointer.x, mousePointer.y);
                 const dist = Phaser.Math.Distance.Between(player.x, player.y, mousePointer.x, mousePointer.y);
                 speed = Phaser.Math.Clamp(dist * 6, 1200, 3600); 
+                // 再次針對自訂速度進行領域減速
+                if (scene.isDoraDomainActive) {
+                    speed *= 0.5;
+                }
             }
             
             player.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
@@ -79,11 +87,22 @@ export function updatePlayer(scene, player, loli, createDashShieldFn) {
         mobileInput.dash = false;
     }
 
+    // 如果哆啦噩夢的領域展開啟動，下墜（重力）速度也同樣會變慢 (降為原本的 0.25 倍以維持相同的拋物線軌跡，僅時間變慢)
+    if (scene.isDoraDomainActive) {
+        player.body.gravity.y = -750; // 世界重力是 1000，加上 -750 使其有效重力為 250
+    } else {
+        player.body.gravity.y = 0;
+    }
+
     if (!s.isDashing) {
-        if (scene.keys.left.isDown || mobileInput.left) player.setVelocityX(-400);
-        else if (scene.keys.right.isDown || mobileInput.right) player.setVelocityX(400);
+        // 如果哆啦噩夢的領域展開啟動，移動速度減慢
+        const currentMoveSpeed = scene.isDoraDomainActive ? 200 : 400;
+        const currentJumpSpeed = scene.isDoraDomainActive ? -275 : -550;
+
+        if (scene.keys.left.isDown || mobileInput.left) player.setVelocityX(-currentMoveSpeed);
+        else if (scene.keys.right.isDown || mobileInput.right) player.setVelocityX(currentMoveSpeed);
         else player.setVelocityX(0);
 
-        if ((scene.keys.up.isDown || mobileInput.up) && player.body.touching.down) player.setVelocityY(-550);
+        if ((scene.keys.up.isDown || mobileInput.up) && player.body.touching.down) player.setVelocityY(currentJumpSpeed);
     }
 }

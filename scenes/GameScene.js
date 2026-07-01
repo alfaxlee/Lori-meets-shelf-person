@@ -10,6 +10,7 @@ import { initBossRefs, bossState, handleLoliHit, updateLoliStateMachine, respawn
 import { initAttackRefs, spawnEnemyBall, scheduleNextLaser, rememberLoliBody, scheduleJumpAttack } from '../boss/LoliAttacks.js';
 import { initUncleRefs, startUncleAttacks, updateUncleAttacks } from '../boss/UncleAttacks.js';
 import { initUncleStateRefs, uncleState, handleUncleHit, updateUncleStateMachine, respawnUncle } from '../boss/UncleStateMachine.js';
+import { initDoraStateRefs, doraState, handleDoraHit, updateDoraStateMachine, respawnDora, cleanupDora } from '../boss/DoraStateMachine.js';
 
 let player;
 let loli;
@@ -22,6 +23,7 @@ let snBullets;
 let uncle;         // 猥瑣大叔 Sprite
 let uncleHPText;   // 猥瑣大叔血量文字
 let dora;          // 哆啦噩夢 Sprite
+let doraHPText;    // 哆啦噩夢血量文字
 
 // --- 武器系統變數 --- (已搬移至 weapons/WeaponManager.js)
 let shockwaves; // 衝擊波群組
@@ -126,10 +128,10 @@ function createScene() {
     this.physics.add.collider(uncle, platforms); // 猥瑣大叔與地板碰撞
     this.physics.add.collider(dora, platforms);  // 哆啦噩夢與地板碰撞
 
-    // 哆啦噩夢的子彈碰撞 (只會摧毀子彈，目前無受傷邏輯)
-    this.physics.add.collider(dora, [mgBullets, sgBullets, snBullets], (boss, bullet) => {
-        bullet.destroy();
-    });
+    // 哆啦噩夢的子彈碰撞
+    this.physics.add.collider(dora, mgBullets, (obj1, obj2) => { handleDoraHit(this, obj2, 600, 200, 5); });
+    this.physics.add.collider(dora, sgBullets, (obj1, obj2) => { handleDoraHit(this, obj2, 400, 150, 25); });
+    this.physics.add.collider(dora, snBullets, (obj1, obj2) => { handleDoraHit(this, obj2, 1500, 500, 50); });
 
     // 子彈碰撞邏輯
     this.physics.add.collider(mgBullets, platforms);
@@ -233,6 +235,22 @@ function createScene() {
         padding: { left: 10, right: 10, top: 8, bottom: 8 } // 加上 padding 避免描邊與字頂被截斷 (修改)
     }).setOrigin(0.5, 0);
     uncleHPText.setVisible(false); // 初始隱藏
+
+    // 哆啦噩夢血量文字 (初始隱藏，顯示位置同大叔，降為 400 減少挑戰難度)
+    doraHPText = this.add.text(width / 2, 100, `哆啦噩夢血量: 400`, { 
+        fontSize: '30px', 
+        fill: '#00aaff', 
+        fontStyle: 'bold', 
+        stroke: '#000', 
+        strokeThickness: 4,
+        padding: { left: 10, right: 10, top: 8, bottom: 8 }
+    }).setOrigin(0.5, 0);
+    doraHPText.setVisible(false);
+
+    // 初始化哆啦噩夢狀態機與參考 (傳入 platforms 以便子彈能做碰撞銷毀判定)
+    initDoraStateRefs({ dora, player, doraHPText, platforms, onDoraDeath: (scene) => {
+        respawnDora(scene);
+    }});
     // 初始化猥瑣大叔狀態機參考
     initUncleStateRefs({ uncle, uncleHPText, onUncleDeath: (scene) => {
         // 擊敗大叔後在大叔左側出生點直接重生大叔 (不再輪替)
@@ -286,17 +304,16 @@ function createScene() {
         
         showLoliHPText(false);
         uncleHPText.setVisible(false);
+        doraHPText.setVisible(true); // 顯示哆啦噩夢 HP
         
-        dora.setActive(true);
-        dora.setVisible(true);
-        dora.body.enable = true;
-        dora.setPosition(width / 4, height - 110);
-        dora.body.allowGravity = true;
-        // 移除 setImmovable(true) 讓物理引擎能自動將他推出地板，玩家撞到會直接死掉所以也不怕被推動
+        // 重置領域狀態與重新產生哆啦噩夢
+        cleanupDora(this);
+        respawnDora(this);
     } else {
         // 預設為蘿莉局：顯示蘿莉 HP，大叔與哆啦噩夢保持隱藏與停用
         showLoliHPText(true);
         uncleHPText.setVisible(false);
+        doraHPText.setVisible(false); // 隱藏哆啦噩夢 HP
         dora.setActive(false); dora.setVisible(false); dora.body.enable = false;
     }
 }
@@ -305,11 +322,14 @@ function createScene() {
 
 // 每幀更新邏輯（由 GameScene.update 委派呼叫）
 function updateScene(time, delta) {
+    // 依據當前選定 Boss 決定自動瞄準目標與碰撞對象
+    const activeBoss = this.selectedBoss === 'uncle' ? uncle : (this.selectedBoss === 'dora' ? dora : loli);
+
     // 繪製衝刺能量條（委派給 HUD 模組）
     drawEnergyBar(playerState.dashEnergy, playerState.maxDashEnergy, playerState.dashEnergyColor);
 
     // 玩家移動與衝刺控制（委派給 PlayerController 模組）
-    updatePlayer(this, player, loli, createDashShield);
+    updatePlayer(this, player, activeBoss, createDashShield);
 
     const pointer = this.input.activePointer;
     const ws = getWeaponState(); // 取得武器狀態
@@ -317,19 +337,19 @@ function updateScene(time, delta) {
     // 彈弓射擊
     const triggerMg = isActuallyMobile ? mobileInput.fireMg : (pointer.leftButtonDown() || mobileInput.fireMg);
     if (triggerMg && !ws.mg.reloading && ws.mg.ammo > 0) {
-        if (time > ws.mg.lastFired + ws.mg.fireRate) { fireMG(this, player, loli, mgBullets, pointer, mobileInput.fireMg); ws.mg.lastFired = time; }
+        if (time > ws.mg.lastFired + ws.mg.fireRate) { fireMG(this, player, activeBoss, mgBullets, pointer, mobileInput.fireMg); ws.mg.lastFired = time; }
     }
 
     // 霸彈槍射擊
     const triggerSg = isActuallyMobile ? mobileInput.fireSg : (pointer.rightButtonDown() || mobileInput.fireSg);
     if (triggerSg && !ws.sg.reloading && ws.sg.ammo > 0 && time > ws.sg.lastFired + ws.sg.fireRate) {
-        fireSG(this, player, loli, sgBullets, pointer, mobileInput.fireSg); ws.sg.lastFired = time;
+        fireSG(this, player, activeBoss, sgBullets, pointer, mobileInput.fireSg); ws.sg.lastFired = time;
     }
 
     // 狙擊槍射擊
     const triggerSn = isActuallyMobile ? mobileInput.fireSn : (pointer.middleButtonDown() || mobileInput.fireSn);
     if (triggerSn && !ws.sn.reloading && ws.sn.ammo > 0 && time > ws.sn.lastFired + ws.sn.fireRate) {
-        fireSN(this, player, loli, snBullets, pointer, mobileInput.fireSn); ws.sn.lastFired = time;
+        fireSN(this, player, activeBoss, snBullets, pointer, mobileInput.fireSn); ws.sn.lastFired = time;
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.reload) || mobileInput.reload) {
@@ -403,6 +423,11 @@ function updateScene(time, delta) {
     // 更新猥瑣大叔邏輯（狀態機 AI 與 攻擊跟隨）
     updateUncleStateMachine(this, time, delta);
     updateUncleAttacks(this);
+
+    // 更新哆啦噩夢邏輯
+    if (dora && dora.active) {
+        updateDoraStateMachine(this, time, delta);
+    }
 }
 
 // createShockwaves / spawnLaser / spawnEnemyBall / createDashDust 已搬移至 boss/LoliAttacks.js 和 player/DashEffects.js
