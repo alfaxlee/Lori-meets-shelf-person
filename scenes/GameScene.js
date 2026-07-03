@@ -10,7 +10,8 @@ import { initBossRefs, bossState, handleLoliHit, updateLoliStateMachine, respawn
 import { initAttackRefs, spawnEnemyBall, scheduleNextLaser, rememberLoliBody, scheduleJumpAttack } from '../boss/LoliAttacks.js';
 import { initUncleRefs, startUncleAttacks, updateUncleAttacks } from '../boss/UncleAttacks.js';
 import { initUncleStateRefs, uncleState, handleUncleHit, updateUncleStateMachine, respawnUncle } from '../boss/UncleStateMachine.js';
-import { initDoraStateRefs, doraState, handleDoraHit, updateDoraStateMachine, respawnDora, cleanupDora } from '../boss/DoraStateMachine.js';
+import { initDoraStateRefs, doraState, handleDoraHit, updateDoraStateMachine, respawnDora, cleanupDora, handleCloneHit } from '../boss/DoraStateMachine.js';
+import { initDoraAttackRefs } from '../boss/DoraAttacks.js';
 
 let player;
 let loli;
@@ -24,6 +25,8 @@ let uncle;         // 猥瑣大叔 Sprite
 let uncleHPText;   // 猥瑣大叔血量文字
 let dora;          // 哆啦噩夢 Sprite
 let doraHPText;    // 哆啦噩夢血量文字
+let clone1HPText;  // 哆啦噩夢分身 1 血量文字
+let clone2HPText;  // 哆啦噩夢分身 2 血量文字
 
 // --- 武器系統變數 --- (已搬移至 weapons/WeaponManager.js)
 let shockwaves; // 衝擊波群組
@@ -52,6 +55,8 @@ function preloadAssets() {
     this.load.image('uncleOverloadBg', './assets/images/uncleOverloadBg.webp');
     // 載入哆啦噩夢圖片
     this.load.image('dora', './assets/images/哆啦噩夢.png');
+    // 載入哆啦噩夢真領域展開背景圖 (本地資源以避免 CORS 載入失敗)
+    this.load.image('doraTrueBg', './assets/images/doraTrueBg.jpg');
 }
 
 // 建立遊戲場景（由 GameScene.create 委派呼叫）
@@ -247,10 +252,34 @@ function createScene() {
     }).setOrigin(0.5, 0);
     doraHPText.setVisible(false);
 
-    // 初始化哆啦噩夢狀態機與參考 (傳入 platforms 以便子彈能做碰撞銷毀判定)
-    initDoraStateRefs({ dora, player, doraHPText, platforms, onDoraDeath: (scene) => {
+    // 分身 1 血量文字 (初始隱藏，位於本尊血量下方 35px)
+    clone1HPText = this.add.text(width / 2, 135, `分身1血量: 125`, { 
+        fontSize: '24px', 
+        fill: '#00aaff', 
+        fontStyle: 'bold', 
+        stroke: '#000', 
+        strokeThickness: 3,
+        padding: { left: 10, right: 10, top: 4, bottom: 4 }
+    }).setOrigin(0.5, 0);
+    clone1HPText.setVisible(false);
+
+    // 分身 2 血量文字 (初始隱藏，位於分身 1 血量下方 35px)
+    clone2HPText = this.add.text(width / 2, 170, `分身2血量: 125`, { 
+        fontSize: '24px', 
+        fill: '#00aaff', 
+        fontStyle: 'bold', 
+        stroke: '#000', 
+        strokeThickness: 3,
+        padding: { left: 10, right: 10, top: 4, bottom: 4 }
+    }).setOrigin(0.5, 0);
+    clone2HPText.setVisible(false);
+
+    // 初始化哆啦噩夢狀態機與參考 (傳入 platforms 以便子彈能做碰撞銷毀判定，傳入子彈群組供分身碰撞偵測，傳入分身血量文字)
+    initDoraStateRefs({ dora, player, doraHPText, clone1HPText, clone2HPText, platforms, mgBullets, sgBullets, snBullets, onDoraDeath: (scene) => {
         respawnDora(scene);
     }});
+    // 初始化哆啦噩夢攻擊模組參考 (與狀態機使用相同的遊戲物件)
+    initDoraAttackRefs({ dora, player, doraHPText, clone1HPText, clone2HPText, platforms });
     // 初始化猥瑣大叔狀態機參考
     initUncleStateRefs({ uncle, uncleHPText, onUncleDeath: (scene) => {
         // 擊敗大叔後在大叔左側出生點直接重生大叔 (不再輪替)
@@ -434,7 +463,7 @@ function updateScene(time, delta) {
 
 
 function createDashShield(scene, player, angle) {
-    const shield = scene.add.graphics(); let hasHitLoli = false; let hasHitUncle = false; let alive = true;
+    const shield = scene.add.graphics(); let hasHitLoli = false; let hasHitUncle = false; let hasHitDora = false; let alive = true;
     scene.time.delayedCall(1150, () => { alive = false; });
     const onUpdate = () => {
         if (!alive || !player.active) { shield.destroy(); scene.events.off('update', onUpdate); return; }
@@ -463,6 +492,25 @@ function createDashShield(scene, player, angle) {
                 handleUncleHit(scene, null, 1500, 500, 25, centerX, centerY);
                 hasHitUncle = true;
             }
+        }
+        // 護盾碰撞哆啦噩夢
+        if (!hasHitDora && dora && dora.active) {
+            const distD = Phaser.Math.Distance.Between(centerX, centerY, dora.x, dora.y);
+            if (distD < radius + 40) {
+                handleDoraHit(scene, null, 1500, 500, 25, centerX, centerY);
+                hasHitDora = true;
+            }
+        }
+        // 護盾碰撞分身 (分身會受到 25 點傷害)
+        if (doraState.clones && doraState.clones.length > 0) {
+            doraState.clones.forEach(clone => {
+                if (clone.active) {
+                    const distC = Phaser.Math.Distance.Between(centerX, centerY, clone.x, clone.y);
+                    if (distC < radius + 40) {
+                        handleCloneHit(scene, clone, null, 25);
+                    }
+                }
+            });
         }
     };
     scene.events.on('update', onUpdate);

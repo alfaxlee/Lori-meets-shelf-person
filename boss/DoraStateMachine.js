@@ -1,16 +1,26 @@
 // === 哆啦噩夢狀態機與 AI 邏輯模組 ===
-// 負責哆啦噩夢的血量、領域展開技能（減慢玩家與子彈速度）與受傷/逃跑 AI 邏輯
-import { playerState } from '../player/PlayerController.js';
+// 負責哆啦噩夢的血量、領域展開技能（減慢玩家與子彈速度）、受傷/死亡處理與逃跑 AI 邏輯
+// 攻擊邏輯已分離至 DoraAttacks.js 模組
+import { startDoraAttacks, stopDoraAttacks, triggerCloneAttack, spawnTrueDomainInitialClones } from './DoraAttacks.js';
 
+// 哆啦噩夢的狀態資料
 export const doraState = {
     hp: 400,              // 哆啦噩夢血量 (降為 400 以降低難度)
     maxHp: 400,
     isDomainExpanded: false, // 是否已經領域展開
     domainCircle: null,   // 領域展開圓形特效
     domainOverlay: null,  // 全螢幕藍色渲染覆蓋層
-    sniperTimer: null     // 狙擊定時器
+    sniperTimer: null,    // 招式排程定時器 (由 DoraAttacks 管理)
+    isTeleporting: false, // 是否正在進行瞬移攻擊
+    isTrueDomainExpanded: false,      // 是否已經啟動真領域展開
+    isTrueDomainTransitioning: false, // 是否正在執行真領域展開過場動畫
+    trueDomainOverlay: null,          // 真領域展開的深藍/紫色覆蓋層
+    trueDomainBg: null,               // 真領域展開的背景圖片
+    clones: [],                       // 儲存分身的陣列
+    activeSniperCount: 0              // 當前正在使用狙擊的哆啦噩夢人數 (主體 + 分身)
 };
 
+// 共享的遊戲物件參考
 let refs = {};
 
 /**
@@ -19,6 +29,10 @@ let refs = {};
 export function initDoraStateRefs(gameRefs) {
     refs = gameRefs;
 }
+
+// ========================================
+// 領域展開
+// ========================================
 
 /**
  * 領域展開：生成0.5秒後執行，以圓圈散發藍色渲染，使螢幕變藍，並將玩家和子彈速度減半
@@ -85,11 +99,21 @@ export function startDomainExpansion(scene) {
     });
 }
 
+// ========================================
+// 受傷與死亡處理
+// ========================================
+
 /**
  * 處理哆啦噩夢受到的傷害
  */
 export function handleDoraHit(scene, bullet, force, stunTime, damage, originX, originY) {
     if (!refs.dora || !refs.dora.active) {
+        if (bullet) bullet.destroy();
+        return;
+    }
+
+    // 真領域展開過場動畫中，Boss 處於無敵狀態，不受任何傷害
+    if (doraState.isTrueDomainTransitioning) {
         if (bullet) bullet.destroy();
         return;
     }
@@ -106,6 +130,11 @@ export function handleDoraHit(scene, bullet, force, stunTime, damage, originX, o
     if (doraState.hp <= 0) {
         handleDoraDeath(scene);
     } else {
+        // 當血量降至 125 以下且尚未啟動真領域展開時，觸發真領域展開過場
+        if (doraState.hp <= 125 && !doraState.isTrueDomainExpanded && !doraState.isTrueDomainTransitioning) {
+            startTrueDomainExpansion(scene);
+        }
+
         // 受擊微小後退並閃紅
         refs.dora.setVelocity(Math.cos(angle) * force * 0.5, Math.sin(angle) * force * 0.5 - 100);
         refs.dora.setTint(0xff0000);
@@ -125,11 +154,8 @@ export function handleDoraDeath(scene) {
     refs.dora.setActive(false).setVisible(false).body.enable = false;
     scene.cameras.main.flash(500, 255, 0, 0);
 
-    // 銷毀狙擊定時器
-    if (doraState.sniperTimer) {
-        doraState.sniperTimer.destroy();
-        doraState.sniperTimer = null;
-    }
+    // 停止所有攻擊排程
+    stopDoraAttacks();
 
     // 清理領域展開效果
     cleanupDora(scene);
@@ -153,6 +179,10 @@ export function handleDoraDeath(scene) {
     });
 }
 
+// ========================================
+// 重生與清理
+// ========================================
+
 /**
  * 重生哆啦噩夢
  */
@@ -172,29 +202,8 @@ export function respawnDora(scene) {
         }
     });
 
-    // 啟動招式選擇計時器，每 2 秒隨機選擇一個招式 (70% 隨選狙擊，15% 火箭筒，15% 無攻擊移動)
-    if (doraState.sniperTimer) {
-        doraState.sniperTimer.destroy();
-    }
-    doraState.sniperTimer = scene.time.addEvent({
-        delay: 2000,
-        callback: () => {
-            if (refs.dora && refs.dora.active) {
-                const r = Math.random();
-                console.log(`[哆啦噩夢 AI] 招式隨機判定，隨機數 r = ${r.toFixed(3)}`);
-                if (r < 0.70) {
-                    console.log("[哆啦噩夢 AI] ➡️ 決定發動狙擊攻擊 (70% 機率)");
-                    triggerSniperAttack(scene);
-                } else if (r < 0.85) {
-                    console.log("[哆啦噩夢 AI] ➡️ 決定發動火箭筒攻擊 (15% 機率)");
-                    triggerRocketAttack(scene);
-                } else {
-                    console.log("[哆啦噩夢 AI] ➡️ 決定保持閒置/純移動 (15% 機率)");
-                }
-            }
-        },
-        loop: true
-    });
+    // 啟動攻擊排程器 (由 DoraAttacks 模組管理)
+    startDoraAttacks(scene);
 }
 
 /**
@@ -203,12 +212,37 @@ export function respawnDora(scene) {
 export function cleanupDora(scene) {
     doraState.isDomainExpanded = false;
     scene.isDoraDomainActive = false;
+    doraState.isTeleporting = false; // 重設瞬移狀態
+    doraState.isTrueDomainTransitioning = false; // 重設過場動畫狀態
 
-    // 銷毀狙擊定時器
-    if (doraState.sniperTimer) {
-        doraState.sniperTimer.destroy();
-        doraState.sniperTimer = null;
+    // 停止所有攻擊排程
+    stopDoraAttacks();
+
+    // 銷毀所有分身及其定時器，並播放消散特效
+    if (doraState.clones && doraState.clones.length > 0) {
+        doraState.clones.forEach(clone => {
+            if (clone.timer) clone.timer.destroy();
+            
+            // 播放消散特效，讓分身消失時更為自然
+            const puff = scene.add.circle(clone.x, clone.y, 0, 0x00aaff, 0.6);
+            puff.setDepth(9999);
+            scene.tweens.add({
+                targets: puff,
+                radius: 50,
+                alpha: 0,
+                duration: 200,
+                onComplete: () => { puff.destroy(); }
+            });
+
+            clone.destroy();
+        });
     }
+    doraState.clones = [];
+    doraState.activeSniperCount = 0;
+
+    // 隱藏分身的血量 UI 文字
+    if (refs.clone1HPText) refs.clone1HPText.setVisible(false);
+    if (refs.clone2HPText) refs.clone2HPText.setVisible(false);
 
     if (doraState.domainCircle) {
         doraState.domainCircle.destroy();
@@ -218,7 +252,22 @@ export function cleanupDora(scene) {
         doraState.domainOverlay.destroy();
         doraState.domainOverlay = null;
     }
+    // 清理真領域展開的覆蓋層與背景
+    if (doraState.trueDomainOverlay) {
+        doraState.trueDomainOverlay.destroy();
+        doraState.trueDomainOverlay = null;
+    }
+    if (doraState.trueDomainBg) {
+        doraState.trueDomainBg.destroy();
+        doraState.trueDomainBg = null;
+    }
+    // 重置真領域狀態 (下次重生可再觸發)
+    doraState.isTrueDomainExpanded = false;
 }
+
+// ========================================
+// AI 移動決策 (每幀更新)
+// ========================================
 
 /**
  * 每幀更新哆啦噩夢的 AI 移動決策
@@ -229,289 +278,330 @@ export function updateDoraStateMachine(scene, time, delta) {
     const player = refs.player;
     const dora = refs.dora;
 
-    // 移動邏輯：盡量避開玩家 (當玩家在左邊則往右走，反之亦然)
-    const moveSpeed = 160; 
-    if (player.x < dora.x) {
-        dora.setVelocityX(moveSpeed);
-        dora.setFlipX(false); // 面向逃跑方向 (右邊)
+    // 如果正在執行真領域展開過場動畫，停止所有 AI (包含玩家和 Boss)
+    if (doraState.isTrueDomainTransitioning) {
+        dora.setVelocityX(0);
+        return;
+    }
+
+    // 如果正在進行瞬移藍球引導，停止常規的移動 AI，使其站在原地蓄力投擲
+    if (doraState.isTeleporting) {
+        dora.setVelocityX(0);
     } else {
-        dora.setVelocityX(-moveSpeed);
-        dora.setFlipX(true);  // 面向逃跑方向 (左邊)
-    }
-
-    // 跳躍邏輯：使用剛體底部 (body.bottom) 代替中心 y 座標進行比較，以消除兩者體積大小不同造成的誤差。
-    // 當哆啦噩夢的底部高於或等於玩家的底部（即 body.bottom <= player.body.bottom，值越小代表在畫面上越高），且踩在地上時瘋狂跳躍。
-    if (dora.body && player.body && dora.body.bottom <= player.body.bottom && dora.body.touching.down) {
-        dora.setVelocityY(-825); // 蘿莉基本跳躍力是 -275，三倍為 -825
-    }
-}
-
-/**
- * 輔助畫虛線的函式 (以紅色虛線警示玩家)
- */
-function drawDashedLine(graphics, x1, y1, x2, y2, dashLength = 10, gapLength = 8) {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    const angle = Math.atan2(dy, dx);
-    let currentDistance = 0;
-    while (currentDistance < distance) {
-        const startX = x1 + Math.cos(angle) * currentDistance;
-        const startY = y1 + Math.sin(angle) * currentDistance;
-        currentDistance += dashLength;
-        if (currentDistance > distance) currentDistance = distance;
-        const endX = x1 + Math.cos(angle) * currentDistance;
-        const endY = y1 + Math.sin(angle) * currentDistance;
-        graphics.lineBetween(startX, startY, endX, endY);
-        currentDistance += gapLength;
-    }
-}
-
-/**
- * 狙擊攻擊：瞄準玩家 0.5 秒，生成紅色虛線警示，發射速度為玩家 2 倍的子彈，且盾牌無敵無效 (強制當機)
- */
-export function triggerSniperAttack(scene) {
-    if (!refs.dora || !refs.dora.active || !refs.player || !refs.player.active) return;
-
-    const dora = refs.dora;
-    const player = refs.player;
-
-    // 建立紅色虛線警示線，深度設為最上層
-    const warningLine = scene.add.graphics();
-    warningLine.setDepth(9999);
-    warningLine.name = 'warning'; // 當 Boss 死亡或清理時，可被自動搜尋並銷毀
-
-    // 初始瞄準角度：隨機偏移 45 度 (約 0.8 弧度)，使其不直接鎖定玩家，產生掃描線轉向玩家的動態效果
-    const initialTargetAngle = Phaser.Math.Angle.Between(dora.x, dora.y, player.x, player.y);
-    const randomOffset = Phaser.Math.FloatBetween(-0.8, 0.8);
-    let currentAngle = initialTargetAngle + randomOffset;
-
-    const updateLine = (time, delta) => {
-        if (!dora.active || !player.active || !warningLine.active) {
-            scene.events.off('update', updateLine);
-            warningLine.destroy();
-            return;
+        // 移動邏輯：盡量避開玩家 (當玩家在左邊則往右走，反之亦然)
+        const moveSpeed = 160; 
+        if (player.x < dora.x) {
+            dora.setVelocityX(moveSpeed);
+            dora.setFlipX(false); // 面向逃跑方向 (右邊)
+        } else {
+            dora.setVelocityX(-moveSpeed);
+            dora.setFlipX(true);  // 面向逃跑方向 (左邊)
         }
 
-        // 計算即時的玩家角度
-        const targetAngle = Phaser.Math.Angle.Between(dora.x, dora.y, player.x, player.y);
+        // 跳躍邏輯：使用剛體底部 (body.bottom) 代替中心 y 座標進行比較，以消除兩者體積大小不同造成的誤差。
+        // 當哆啦噩夢的底部高於或等於玩家的底部（即 body.bottom <= player.body.bottom，值越小代表在畫面上越高），且踩在地上時瘋狂跳躍。
+        if (dora.body && player.body && dora.body.bottom <= player.body.bottom && dora.body.touching.down) {
+            dora.setVelocityY(-825); // 蘿莉基本跳躍力是 -275，三倍為 -825
+        }
+    }
 
-        // 以固定的角速度 (4 弧度每秒) 慢慢將瞄準線轉向玩家，使其瞄準速度變慢以降低難度
-        const angularSpeed = 4; // 慢速轉向
-        const step = angularSpeed * (delta / 1000);
-        currentAngle = Phaser.Math.Angle.RotateTo(currentAngle, targetAngle, step);
+    // 更新分身的 AI 移動與跳躍 (與本體邏輯一致，避開玩家)
+    if (doraState.clones && doraState.clones.length > 0) {
+        doraState.clones.forEach(clone => {
+            if (clone.active && clone.body) {
+                const moveSpeed = 160;
+                if (player.x < clone.x) {
+                    clone.setVelocityX(moveSpeed);
+                    clone.setFlipX(false);
+                } else {
+                    clone.setVelocityX(-moveSpeed);
+                    clone.setFlipX(true);
+                }
 
-        // 繪製從 Boss 出發、沿著當前旋轉角度繪製的紅色虛線
-        warningLine.clear();
-        warningLine.lineStyle(2, 0xff0000, 0.85);
-        
-        const lineLength = 2000;
-        const endX = dora.x + Math.cos(currentAngle) * lineLength;
-        const endY = dora.y + Math.sin(currentAngle) * lineLength;
-        drawDashedLine(warningLine, dora.x, dora.y, endX, endY);
-    };
+                if (clone.body.bottom <= player.body.bottom && clone.body.touching.down) {
+                    clone.setVelocityY(-825);
+                }
+            }
+        });
+    }
+}
 
-    scene.events.on('update', updateLine);
+// ========================================
+// 真領域展開 (血量≤ 125 時觸發)
+// ========================================
 
-    // 瞄準 0.5 秒後，鎖定軌跡並發射高速狙擊子彈
-    scene.time.delayedCall(500, () => {
-        scene.events.off('update', updateLine);
-        warningLine.destroy();
+/**
+ * 真領域展開過場動畫：
+ * 1. 暂停所有攻擊與玩家移動
+ * 2. 原領域崩壞破碎效果
+ * 3. 覆蓋更深的藍色渲染
+ * 4. 替換背景圖片
+ * 5. 恢復遊戲
+ */
+function startTrueDomainExpansion(scene) {
+    if (doraState.isTrueDomainTransitioning || doraState.isTrueDomainExpanded) return;
+    doraState.isTrueDomainTransitioning = true;
 
-        if (!dora.active || !player.active) return;
+    const width = scene.cameras.main.width;
+    const height = scene.cameras.main.height;
+    const player = refs.player;
+    const dora = refs.dora;
 
-        // 發射角度為 0.5 秒時間截止時，虛線實際轉到的角度 (非直接鎖定玩家當時的位置，玩家可藉由快速衝刺閃避)
-        const fireAngle = currentAngle;
+    // === 階段 0: 凍結玩家與 Boss 的移動 ===
+    // 停止攻擊排程
+    stopDoraAttacks();
 
-        // 速度是玩家狙擊子彈的兩倍。玩家狙擊速度在正常是 1500，領域內是 750
-        // 故 Boss 狙擊速度正常是 3000，領域內變 1500
-        const baseSpeed = 3000;
-        const speed = scene.isDoraDomainActive ? baseSpeed * 0.5 : baseSpeed;
+    // 立即清除畫面上所有正在進行的攻擊物件（狙擊虛線、火箭、太陽球、驚嘆號等）
+    scene.children.list.slice().forEach(child => {
+        if (child.name === 'warning' || child.name === 'warningLine') {
+            child.destroy();
+        }
+        if (child.type === 'Text' && child.text === '!') {
+            child.destroy();
+        }
+    });
+    // 凍結玩家 (將速度歸零並禁用物理運動)
+    if (player && player.body) {
+        player.setVelocity(0, 0);
+        player.body.moves = false; // 禁用物理引擎的移動更新
+    }
+    // 凍結 Boss
+    if (dora && dora.body) {
+        dora.setVelocity(0, 0);
+        dora.body.moves = false;
+    }
 
-        // 建立子彈，外觀為與渲染覆蓋層一致的純藍色長方形 (大小與原本狙擊子彈一致為 60x4)
-        const bullet = scene.add.rectangle(dora.x + Math.cos(fireAngle) * 40, dora.y + Math.sin(fireAngle) * 40, 60, 4, 0x0055ff);
-        bullet.setDepth(9999);
-        scene.physics.add.existing(bullet);
-        bullet.setRotation(fireAngle);
-        bullet.body.allowGravity = false;
-        bullet.body.setVelocity(Math.cos(fireAngle) * speed, Math.sin(fireAngle) * speed);
+    // === 階段 1: 原領域崩壞破碎效果 (0 ~ 1500ms) ===
+    // 讓原本的藍色覆蓋層開始閃爍抖動
+    if (doraState.domainOverlay) {
+        scene.tweens.add({
+            targets: doraState.domainOverlay,
+            alpha: { from: 0.2, to: 0.05 },
+            duration: 150,
+            yoyo: true,
+            repeat: 4, // 閃爍 5 次
+            ease: 'Sine.easeInOut'
+        });
+    }
 
-        // 與牆壁/平台碰撞時銷毀
-        if (refs.platforms) {
-            scene.physics.add.collider(bullet, refs.platforms, () => {
-                bullet.destroy();
+    // 生成破碎碎片效果：從螢幕中心飛散出多個藍色碎片
+    const numShards = 20; // 碎片數量
+    for (let i = 0; i < numShards; i++) {
+        // 隨機大小的三角形/矩形碎片
+        const shardW = Phaser.Math.Between(15, 50);
+        const shardH = Phaser.Math.Between(10, 35);
+        const shard = scene.add.rectangle(
+            Phaser.Math.Between(50, width - 50),
+            Phaser.Math.Between(50, height - 50),
+            shardW, shardH, 0x00aaff, 0.6
+        );
+        shard.setDepth(10001);
+        shard.setRotation(Phaser.Math.FloatBetween(0, Math.PI * 2));
+
+        // 碎片往隨機方向飛散、旋轉並淡出
+        scene.tweens.add({
+            targets: shard,
+            x: shard.x + Phaser.Math.Between(-200, 200),
+            y: shard.y + Phaser.Math.Between(-200, 200),
+            angle: Phaser.Math.Between(-360, 360),
+            alpha: 0,
+            scaleX: 0,
+            scaleY: 0,
+            duration: Phaser.Math.Between(800, 1400),
+            ease: 'Quad.easeOut',
+            onComplete: () => { shard.destroy(); }
+        });
+    }
+
+    // 螢幕劇烈震動代表領域崩壞
+    scene.cameras.main.shake(1000, 0.02);
+    // 白色閃光表示崩壞瞬間
+    scene.cameras.main.flash(500, 255, 255, 255);
+
+    // === 階段 2: 銷毀原領域覆蓋層，短暫黑屏 (1500ms 後) ===
+    scene.time.delayedCall(1500, () => {
+        // 銷毀原領域特效
+        if (doraState.domainCircle) {
+            doraState.domainCircle.destroy();
+            doraState.domainCircle = null;
+        }
+        if (doraState.domainOverlay) {
+            doraState.domainOverlay.destroy();
+            doraState.domainOverlay = null;
+        }
+
+        // 瞬間黑屏過渡
+        const blackScreen = scene.add.rectangle(0, 0, width, height, 0x000000, 1);
+        blackScreen.setOrigin(0, 0);
+        blackScreen.setScrollFactor(0);
+        blackScreen.setDepth(10002);
+
+        // === 階段 3: 在黑屏中替換背景，然後淡出黑屏 (500ms 後) ===
+        scene.time.delayedCall(500, () => {
+            // 加入真領域展開背景圖 (depth 設為 -10，確保在所有遊戲物件之下)
+            const bg = scene.add.image(width / 2, height / 2, 'doraTrueBg');
+            bg.setDisplaySize(width, height);
+            bg.setDepth(-10); // 放在所有物件之下 (地板、玩家、Boss 等預設 depth 為 0)
+            doraState.trueDomainBg = bg;
+
+            // 覆蓋一層更深的紫色渲染 (透明度 0.35，主題色變為紫色 0x6600cc)
+            const trueOverlay = scene.add.rectangle(0, 0, width, height, 0x6600cc, 0.35);
+            trueOverlay.setOrigin(0, 0);
+            trueOverlay.setScrollFactor(0);
+            trueOverlay.setDepth(9998);
+            doraState.trueDomainOverlay = trueOverlay;
+
+            // 淡出黑屏，揭曉真領域
+            scene.tweens.add({
+                targets: blackScreen,
+                alpha: 0,
+                duration: 1000,
+                ease: 'Quad.easeIn',
+                onComplete: () => {
+                    blackScreen.destroy();
+
+                    // === 階段 4: 解凍玩家與 Boss，恢復遊戲 ===
+                    doraState.isTrueDomainExpanded = true;
+                    doraState.isTrueDomainTransitioning = false;
+
+                    // 動畫結束後，血量以 125 開始 (重新鎖定為 125 並更新 UI)
+                    doraState.hp = 125;
+                    if (refs.doraHPText) {
+                        refs.doraHPText.setText(`哆啦噩夢血量: ${doraState.hp}`);
+                    }
+
+                    // 實體外觀變為有紫色渲染的哆啦噩夢 (0xaa55ff)
+                    dora.setTint(0xaa55ff);
+
+                    // 恢復玩家移動
+                    if (player && player.body) {
+                        player.body.moves = true;
+                    }
+                    // 恢復 Boss 移動
+                    if (dora && dora.body) {
+                        dora.body.moves = true;
+                    }
+
+                    // 丟出兩顆紫色的分身傳送球以製造分身 (原本的 Boss 不會消失)
+                    spawnTrueDomainInitialClones(scene);
+
+                    // 重新啟動本尊的攻擊排程
+                    startDoraAttacks(scene);
+
+                    // 總結：真領域展開完成，相機再次震動宣告
+                    scene.cameras.main.shake(300, 0.01);
+                    console.log("[哆啦噩夢 AI] ✨ 真領域展開完成，紫色主題啟動！");
+                }
             });
-        }
-
-        // 為防止子彈速度過快導致穿牆漏判 (Tunneling)，每幀使用連續線段 (Line Sweep) 做精準的碰撞交叉檢查
-        let prevX = bullet.x;
-        let prevY = bullet.y;
-
-        const checkTunneling = () => {
-            if (!bullet.active) {
-                scene.events.off('update', checkTunneling);
-                return;
-            }
-            if (!player.active) {
-                bullet.destroy();
-                scene.events.off('update', checkTunneling);
-                return;
-            }
-
-            // 使用前後兩點拉出線段，與玩家剛體矩形進行相交檢測
-            const line = new Phaser.Geom.Line(prevX, prevY, bullet.x, bullet.y);
-            const playerRect = player.getBounds();
-
-            if (Phaser.Geom.Intersects.LineToRectangle(line, playerRect)) {
-                playerState.isInvincible = false; // 強制解除玩家無敵/衝刺護盾狀態
-                scene.triggerCrash(true); // 傳入 true 以強迫當機，使衝刺無敵/盾牌無效！
-                bullet.destroy();
-                scene.events.off('update', checkTunneling);
-                return;
-            }
-
-            // 若飛出邊界則自動銷毀，避免資源洩漏
-            if (bullet.x < 0 || bullet.x > scene.cameras.main.width || bullet.y < 0 || bullet.y > scene.cameras.main.height) {
-                bullet.destroy();
-                scene.events.off('update', checkTunneling);
-                return;
-            }
-
-            prevX = bullet.x;
-            prevY = bullet.y;
-        };
-
-        scene.events.on('update', checkTunneling);
-        bullet.once('destroy', () => {
-            scene.events.off('update', checkTunneling);
         });
     });
 }
 
 /**
- * 火箭筒攻擊：朝玩家方向發射，外觀為長方形本體加前端三角形，速度與玩家霰彈槍一致。
- * 只要玩家進入火箭筒半徑內即觸發大爆炸且必中玩家。
+ * 在指定位置生成一個藍色渲染的哆啦噩夢分身
  */
-export function triggerRocketAttack(scene) {
-    if (!refs.dora || !refs.dora.active || !refs.player || !refs.player.active) return;
+export function spawnClone(scene, x, y) {
+    if (!refs.dora || !refs.dora.active) return null;
 
-    const dora = refs.dora;
-    const player = refs.player;
-
-    // 鎖定玩家當下角度發射
-    const fireAngle = Phaser.Math.Angle.Between(dora.x, dora.y, player.x, player.y);
-
-    // 建立火箭筒 Container
-    const rocket = scene.add.container(dora.x + Math.cos(fireAngle) * 40, dora.y + Math.sin(fireAngle) * 40);
-    rocket.setDepth(9999);
-    rocket.name = 'warning'; // 死亡時自動銷毀
-
-    // 使用 Graphics 精準繪製無縫貼合且垂直置中的火箭外觀 (本體長方形 + 前端三角形彈頭)
-    const rocketGfx = scene.add.graphics();
-    // 畫長方形本體 (寬度 30，高度 16，水平置中偏左)
-    rocketGfx.fillStyle(0x0055ff, 1);
-    rocketGfx.fillRect(-21, -8, 30, 16);
-    // 畫三角形彈頭 (基底寬度 16，長度 12，與長方形右側邊界完美無縫貼合，且上下對稱垂直置中)
-    rocketGfx.fillStyle(0x00aaff, 1);
-    rocketGfx.beginPath();
-    rocketGfx.moveTo(9, -8);   // 三角形左上角 (剛好對齊長方形右上角 9, -8)
-    rocketGfx.lineTo(9, 8);    // 三角形左下角 (剛好對齊長方形右下角 9, 8)
-    rocketGfx.lineTo(21, 0);   // 三角形前端頂尖 (剛好在 0 水平線上，長度延伸至 21)
-    rocketGfx.closePath();
-    rocketGfx.fillPath();
-
-    rocket.add(rocketGfx);
-
-    // 啟動物理剛體，設定尺寸為整體外型大小 (42x16)，並設為不受重力影響
-    scene.physics.add.existing(rocket);
-    rocket.body.setSize(42, 16);
-    rocket.body.allowGravity = false;
-    rocket.setRotation(fireAngle);
-
-    // 速度與玩家霰彈槍一致 (正常模式 700，領域模式 350)
-    const baseSpeed = 700;
-    const speed = scene.isDoraDomainActive ? baseSpeed * 0.5 : baseSpeed;
-    rocket.body.setVelocity(Math.cos(fireAngle) * speed, Math.sin(fireAngle) * speed);
-
-    // 與實體平台碰撞銷毀並爆炸
-    if (refs.platforms) {
-        scene.physics.add.collider(rocket, refs.platforms, () => {
-            explodeRocket(scene, rocket);
-        });
+    // 決定分身索引 (1 或 2，看哪個編號目前空著)
+    let cloneIndex = 1;
+    if (doraState.clones.some(c => c.cloneIndex === 1)) {
+        cloneIndex = 2;
     }
 
-    // 每影格進行玩家距離偵測 (半徑判定)
-    const checkProximity = () => {
-        if (!rocket.active) {
-            scene.events.off('update', checkProximity);
-            return;
-        }
-        if (!player.active) {
-            rocket.destroy();
-            scene.events.off('update', checkProximity);
-            return;
-        }
+    const clone = scene.physics.add.sprite(x, y, 'dora');
+    clone.setDisplaySize(refs.dora.displayWidth, refs.dora.displayHeight);
+    clone.setCollideWorldBounds(true);
+    clone.setBounce(0.1);
+    clone.setTint(0x00aaff); // 分身外觀只有藍色渲染
+    clone.hp = 125;          // 分身擁有與本尊一樣的 125 點血量
+    clone.isClone = true;    // 標記為分身
+    clone.cloneIndex = cloneIndex; // 紀錄分身編號
+    clone.name = 'warning';  // 設為 warning 可以在場景清理時自動銷毀
 
-        const dist = Phaser.Math.Distance.Between(rocket.x, rocket.y, player.x, player.y);
-        const explosionRadius = 200; // 火箭筒感應半徑 (改為 200 像素)
+    // 顯示並更新對應分身的血量 UI 文字
+    if (cloneIndex === 1 && refs.clone1HPText) {
+        refs.clone1HPText.setText(`分身1血量: ${clone.hp}`);
+        refs.clone1HPText.setVisible(true);
+    } else if (cloneIndex === 2 && refs.clone2HPText) {
+        refs.clone2HPText.setText(`分身2血量: ${clone.hp}`);
+        refs.clone2HPText.setVisible(true);
+    }
 
-        // 只要玩家進入感應半徑之內，立即觸發爆炸且必定炸到玩家
-        if (dist <= explosionRadius) {
-            explodeRocket(scene, rocket, true); // true 代表強迫命中
-            scene.events.off('update', checkProximity);
-            return;
-        }
+    // 啟用分身與地板/平台的碰撞
+    if (refs.platforms) {
+        scene.physics.add.collider(clone, refs.platforms);
+    }
 
-        // 若超出邊界則自我回收
-        if (rocket.x < 0 || rocket.x > scene.cameras.main.width || rocket.y < 0 || rocket.y > scene.cameras.main.height) {
-            rocket.destroy();
-            scene.events.off('update', checkProximity);
-        }
-    };
+    // 啟用分身與玩家子彈的碰撞 (使用 refs 傳遞的子彈群組)
+    if (refs.mgBullets) scene.physics.add.collider(clone, refs.mgBullets, (c, b) => { handleCloneHit(scene, c, b, 5); });
+    if (refs.sgBullets) scene.physics.add.collider(clone, refs.sgBullets, (c, b) => { handleCloneHit(scene, c, b, 25); });
+    if (refs.snBullets) scene.physics.add.collider(clone, refs.snBullets, (c, b) => { handleCloneHit(scene, c, b, 50); });
 
-    scene.events.on('update', checkProximity);
-    rocket.once('destroy', () => {
-        scene.events.off('update', checkProximity);
+    // 啟動分身獨立的隨機招式計時器 (每 2 秒一次)
+    clone.timer = scene.time.addEvent({
+        delay: 2000,
+        callback: () => {
+            if (clone.active) {
+                triggerCloneAttack(scene, clone);
+            }
+        },
+        loop: true
     });
+
+    doraState.clones.push(clone);
+    return clone;
 }
 
 /**
- * 執行火箭筒爆炸：生成藍色擴散波視覺效果，並執行玩家受擊判定 (強制或半徑內必中)
+ * 處理分身受傷邏輯
  */
-function explodeRocket(scene, rocket, forceHitPlayer = false) {
-    if (!rocket.active) return;
+export function handleCloneHit(scene, clone, bullet, damage) {
+    if (bullet) bullet.destroy();
+    if (!clone || !clone.active) return;
 
-    const player = refs.player;
-    const rx = rocket.x;
-    const ry = rocket.y;
+    clone.hp -= damage;
 
-    // 銷毀火箭剛體
-    rocket.destroy();
+    // 即時更新對應分身的血量 UI 文字
+    if (clone.cloneIndex === 1 && refs.clone1HPText) {
+        refs.clone1HPText.setText(`分身1血量: ${Math.max(0, clone.hp)}`);
+    } else if (clone.cloneIndex === 2 && refs.clone2HPText) {
+        refs.clone2HPText.setText(`分身2血量: ${Math.max(0, clone.hp)}`);
+    }
 
-    // 建立爆炸波效果 (藍色能量圈擴大並淡出，半徑調整至 200 像素以貼合判定範圍)
-    const blast = scene.add.circle(rx, ry, 0, 0x00aaff, 0.6);
-    blast.setDepth(9999);
-    scene.tweens.add({
-        targets: blast,
-        radius: 200,
-        alpha: 0,
-        duration: 350,
-        ease: 'Quad.easeOut',
-        onComplete: () => { blast.destroy(); }
+    // 受傷閃紅
+    clone.setTint(0xff0000);
+    scene.time.delayedCall(150, () => {
+        if (clone.active) clone.setTint(0x00aaff); // 恢復藍色渲染
     });
 
-    // 震動相機增加打擊感
-    scene.cameras.main.shake(200, 0.01);
+    // 分身血量歸零時銷毀
+    if (clone.hp <= 0) {
+        // 播放精緻的藍色消散圈特效
+        const puff = scene.add.circle(clone.x, clone.y, 0, 0x00aaff, 0.6);
+        puff.setDepth(9999);
+        scene.tweens.add({
+            targets: puff,
+            radius: 50,
+            alpha: 0,
+            duration: 200,
+            onComplete: () => { puff.destroy(); }
+        });
 
-    // 火箭判定：若強迫命中或玩家依然在爆炸濺射半徑 (200 像素，使判定與感應半徑一致) 內，觸發當機
-    if (forceHitPlayer) {
-        playerState.isInvincible = false; // 強制解除玩家無敵/衝刺護盾狀態
-        scene.triggerCrash(true); // 強制撞擊 (盾牌/無敵無效)
-    } else if (player && player.active) {
-        const dist = Phaser.Math.Distance.Between(rx, ry, player.x, player.y);
-        if (dist <= 200) {
-            playerState.isInvincible = false; // 強制解除玩家無敵/衝刺護盾狀態
-            scene.triggerCrash(true);
+        // 隱藏對應分身的血量 UI 文字
+        if (clone.cloneIndex === 1 && refs.clone1HPText) {
+            refs.clone1HPText.setVisible(false);
+        } else if (clone.cloneIndex === 2 && refs.clone2HPText) {
+            refs.clone2HPText.setVisible(false);
         }
+
+        // 停止分身的定時器
+        if (clone.timer) {
+            clone.timer.destroy();
+        }
+
+        // 從分身管理陣列中移除並銷毀 Sprite
+        doraState.clones = doraState.clones.filter(c => c !== clone);
+        clone.destroy();
     }
 }
