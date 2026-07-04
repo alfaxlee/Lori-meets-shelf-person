@@ -50,6 +50,16 @@ export function createWeaponUI(scene) {
 }
 
 /**
+ * 設定所有武器 UI 的顯示狀態
+ * @param {boolean} visible - 是否顯示武器 UI
+ */
+export function setWeaponUIVisible(visible) {
+    if (mgText && typeof mgText.setVisible === 'function') mgText.setVisible(visible);
+    if (sgText && typeof sgText.setVisible === 'function') sgText.setVisible(visible);
+    if (snText && typeof snText.setVisible === 'function') snText.setVisible(visible);
+}
+
+/**
  * 換彈邏輯
  * @param {Phaser.Scene} scene - 遊戲場景
  * @param {string} [weaponType] - 指定武器類型，不指定則全部換彈
