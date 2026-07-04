@@ -90,12 +90,14 @@ export function startUncleAttacks(scene) {
 }
 
 let overloadAttackTimerEvent = null; // 超級地刺計時器
+let cooldownTimerEvent = null;       // 攻擊結束後的冷卻定時器
 
 export function stopUncleAttacks() {
     if (hammerTimerEvent) { hammerTimerEvent.remove(); hammerTimerEvent = null; }
     if (summonSpikeTimerEvent) { summonSpikeTimerEvent.remove(); summonSpikeTimerEvent = null; }
     if (ballRushTimerEvent) { ballRushTimerEvent.remove(); ballRushTimerEvent = null; }
     if (overloadAttackTimerEvent) { overloadAttackTimerEvent.remove(); overloadAttackTimerEvent = null; }
+    if (cooldownTimerEvent) { cooldownTimerEvent.remove(); cooldownTimerEvent = null; }
 }
 
 function scheduleNextHammer(scene) {
@@ -125,8 +127,8 @@ function scheduleNextSummonSpike(scene) {
 export function scheduleNextOverloadAttack(scene) {
     console.log('scheduleNextOverloadAttack triggered!');
     if (!refs.uncle || !refs.uncle.active) return;
-    // 每 1 秒發動一次過載模式隨機攻擊
-    overloadAttackTimerEvent = scene.time.delayedCall(1000, () => {
+    // 改為 0.5 秒 (500 毫秒) 冷卻
+    overloadAttackTimerEvent = scene.time.delayedCall(500, () => {
         if (uncleState.isOverload) {
             const attacks = ['superSpike', 'superSpikeBall', 'triangleMissile']; // 目前過載模式專屬攻擊
             const randomAttack = Phaser.Utils.Array.GetRandom(attacks);
@@ -164,16 +166,27 @@ function tryExecuteNextAttack(scene) {
  * 結束當前攻擊並觸發佇列中下一個攻擊
  */
 function endAttack(scene) {
-    uncleState.isAttacking = false;
+    // 移除舊的冷卻定時器以防重疊
+    if (cooldownTimerEvent) {
+        cooldownTimerEvent.remove();
+        cooldownTimerEvent = null;
+    }
+
     if (refs.uncle && refs.uncle.active) {
-        scene.time.delayedCall(100, () => {
+        // 在 0.5 秒 (500 毫秒) 延遲期間內，isAttacking 依然保持為 true，防止新攻擊被重複觸發
+        cooldownTimerEvent = scene.time.delayedCall(500, () => {
+            uncleState.isAttacking = false; // 延遲時間到，才真正解除攻擊鎖定
+            cooldownTimerEvent = null;
+            
             tryExecuteNextAttack(scene);
             
-            // 如果在過載模式且攻擊佇列為空，排程下一次過載攻擊 (3秒後)
+            // 如果在過載模式且攻擊佇列為空，排程下一次過載攻擊 (500 ms)
             if (uncleState.isOverload && uncleState.attackQueue.length === 0) {
                 scheduleNextOverloadAttack(scene);
             }
         });
+    } else {
+        uncleState.isAttacking = false;
     }
 }
 
