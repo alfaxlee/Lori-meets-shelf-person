@@ -1006,27 +1006,52 @@ function triggerDivineBeam(scene, playerSprite, yeahSprite) {
             ease: 'Linear'
         });
 
-        // 建立光束 Graphics
+        // 建立光束 Graphics (新增中文註解：建立漸漸變粗光束的畫筆)
         const beam = scene.add.graphics();
         beam.setDepth(9991);
-
-        // 繪製從天花板到玩家位置的巨大光束 (寬度 80px 的金色半透明矩形)
-        const beamWidth = 80;
-        const beamX = px - beamWidth / 2;
-
-        // 光束主體 (金黃色半透明)
-        beam.fillStyle(0xffd700, 0.7);
-        beam.fillRect(beamX, 0, beamWidth, py + 50);
-        // 光束核心 (更亮的白金色)
-        beam.fillStyle(0xffffff, 0.4);
-        beam.fillRect(beamX + 15, 0, beamWidth - 30, py + 50);
-        // 光束外層擴散 (淡金色)
-        beam.fillStyle(0xffd700, 0.2);
-        beam.fillRect(beamX - 20, 0, beamWidth + 40, py + 50);
-
         beam.setAlpha(0);
 
-        // 光束淡入動畫
+        // 初始粗度與目標最大粗度 (與地面魔法陣 groundWidth = width / 2 相同) (新增中文註解：設定初始粗度與魔法陣同寬的目標值)
+        let currentBeamWidth = 20;
+        const targetBeamWidth = width / 2;
+
+        // 繪製神聖光束的內部函式 (新增中文註解：動態更新並繪製金色變粗光束與核心)
+        const drawHolyBeam = () => {
+            if (!beam || !beam.active) return;
+            beam.clear();
+            const beamX = px - currentBeamWidth / 2;
+
+            // 1. 光束外層擴散 (淡金色)
+            beam.fillStyle(0xffd700, 0.15);
+            beam.fillRect(beamX - 25, 0, currentBeamWidth + 50, py + 50);
+            
+            // 2. 光束主體 (金黃色半透明)
+            beam.fillStyle(0xffd700, 0.65);
+            beam.fillRect(beamX, 0, currentBeamWidth, py + 50);
+            
+            // 3. 光束核心 (更亮的白金色)
+            beam.fillStyle(0xffffff, 0.45);
+            beam.fillRect(beamX + currentBeamWidth * 0.15, 0, currentBeamWidth * 0.7, py + 50);
+        };
+
+        // 監聽每幀 update 事件以進行動態重繪 (新增中文註解：監聽每幀重繪以更新雷射粗度)
+        const onBeamUpdate = () => {
+            drawHolyBeam();
+        };
+        scene.events.on('update', onBeamUpdate);
+
+        // 光束漸漸變粗動畫 (4秒內粗到跟魔法陣一樣寬) (新增中文註解：啟動膨脹動畫)
+        scene.tweens.add({
+            targets: { w: 20 },
+            w: targetBeamWidth,
+            duration: 4000,
+            ease: 'Quad.easeIn', // 越後期膨脹速度越快
+            onUpdate: (tween, target) => {
+                currentBeamWidth = target.w;
+            }
+        });
+
+        // 光束淡入動畫 (新增中文註解：淡入光束)
         scene.tweens.add({
             targets: beam,
             alpha: 1,
@@ -1048,6 +1073,9 @@ function triggerDivineBeam(scene, playerSprite, yeahSprite) {
 
         // 4 秒後清除光束與魔法陣，觸發當機畫面
         scene.time.delayedCall(4000, () => {
+            // 移除 update 監聽器，避免殘留繪製 (新增中文註解：移除每幀重繪監聽)
+            scene.events.off('update', onBeamUpdate);
+
             // 清除所有魔法陣、鎖鏈與粒子系統
             magicCircles.forEach(c => { if (c && c.destroy) c.destroy(); });
 
@@ -1063,7 +1091,7 @@ function triggerDivineBeam(scene, playerSprite, yeahSprite) {
                     playerSprite.body.allowGravity = true;
                     playerState.isInvincible = false;
 
-                    // 被光束打死後，進入選擇畫面 (當機 or 死亡)
+                    // 被光束打死後，進入選擇畫面 (當機 or 死亡) (新增中文註解：進入選擇選單)
                     showDeathSelectionScreen(scene);
                 }
             });
@@ -1076,6 +1104,9 @@ function triggerDivineBeam(scene, playerSprite, yeahSprite) {
  * 流程：暫停遊戲 → 進入全黑背景 → 打字機效果字體 → 提供「當機」與「死亡」兩個按鈕 → 滾輪滑動 10 秒後可觸發隱藏「冥王炮」按鍵
  */
 function showDeathSelectionScreen(scene) {
+    const width = scene.cameras.main.width;
+    const height = scene.cameras.main.height;
+
     // 暫停遊戲物理與場景 (新增中文註解：暫停遊戲以進行動畫過場)
     if (scene.physics) {
         scene.physics.pause();
@@ -1489,15 +1520,24 @@ function showDeathSelectionScreen(scene) {
             }
 
             // 提升玩家與顏王Yeah 的渲染層級，使他們高於白色背景 (9980) (新增中文註解：提昇玩家與Boss層級使他們不被白色背景遮擋)
+            // 修正：依據新要求，玩家傳送到「戰場右側的空中」 (width - 150, height - 300)！
             if (player) {
                 player.setDepth(9985);
                 player.setVisible(true);
                 player.setAlpha(1.0);
+                player.setPosition(width - 150, height - 300); // 傳送至右側空中
+                if (player.body) {
+                    player.body.enable = false; // 關閉物理，使其能懸浮
+                }
             }
             if (yeah && yeah.active) {
                 yeah.setDepth(9985);
                 yeah.setVisible(true);
                 yeah.setAlpha(1.0);
+                yeah.setPosition(150, height - 110); // 顏王Yeah 傳送至左側地上
+                if (yeah.body) {
+                    yeah.body.enable = false;
+                }
             }
 
             // 釋放最華麗的綠色爆炸 (新增中文註解：發射綠色究極爆炸)
@@ -1508,19 +1548,25 @@ function showDeathSelectionScreen(scene) {
 
 /**
  * 超究極華麗綠色爆炸 ── 冥王炮擊中顏王Yeah時觸發
- * 特效包含：多色閃光、強烈震動、巨型橫向雷射光束射線、多組高密度的擴散綠色彩色粒子 (新增中文註解：全綠色主題的超華麗核爆特效)
+ * 特效包含：多色閃光、強烈震動、巨型斜向雷射光束射線、多組高密度的擴散綠色彩色粒子 (新增中文註解：全綠色主題的超華麗核爆特效)
  */
 function triggerSuperPlutoExplosion(scene) {
     const width = scene.cameras.main.width;
     const height = scene.cameras.main.height;
 
-    // 1. 建立全螢幕白色底色 (層級設為 9980 最底層) (新增中文註解：依據劇本改為白色底層)
+    // 重新獲取精準的玩家座標與顏王座標 (用於繪製斜向雷射) (新增中文註解：獲取雙方座標繪製對角線巨砲)
+    const playerX = width - 150;
+    const playerY = height - 300;
+    const yeahX = 150;
+    const yeahY = height - 110;
+
+    // 1. 建立全螢幕白色底色 (層級設為 9980 最底層) (新增中文註解：白色底層)
     const whiteBg = scene.add.graphics();
     whiteBg.setDepth(9980);
     whiteBg.fillStyle(0xffffff, 1.0);
     whiteBg.fillRect(0, 0, width, height);
 
-    // 2. 顯示初始地板與平台 (層級設為 9981 高於白色背景) (新增中文註解：還原地底平台，且提昇層級防白色底遮蓋)
+    // 2. 顯示初始地板與平台 (層級設為 9981 高於白色背景) (新增中文註解：還原初始地底平台)
     if (ground) {
         ground.setVisible(true);
         ground.setDepth(9981);
@@ -1534,20 +1580,20 @@ function triggerSuperPlutoExplosion(scene) {
         });
     }
 
-    // 3. 建立旋轉綠色科技魔法陣 (放在玩家前) (層級 9991) (新增中文註解：建立玩家前方的綠色科技魔法陣作為炮口)
+    // 3. 建立旋轉綠色科技魔法陣 (放在右側玩家前，且大小翻倍) (層級 9991) (新增中文註解：玩家前方的特大綠色科技魔法陣)
     const magicCircle = scene.add.graphics();
     magicCircle.setDepth(9991);
-    magicCircle.setPosition(width / 2 - 60, height - 110);
+    magicCircle.setPosition(playerX, playerY);
     
-    // 繪製魔法陣樣式 (雙環 + 十字 + 正方形) (新增中文註解：繪製科技感魔法陣線條)
-    magicCircle.lineStyle(3, 0x00ff00, 0.95);
-    magicCircle.strokeCircle(0, 0, 60);
-    magicCircle.lineStyle(1.5, 0x00ff7f, 0.7);
-    magicCircle.strokeCircle(0, 0, 45);
-    magicCircle.strokeRect(-30, -30, 60, 60);
+    // 繪製更大（雙倍半徑）魔法陣樣式 (雙環 + 十字 + 正方形) (新增中文註解：繪製雙倍大小科技感魔法陣線條)
+    magicCircle.lineStyle(4, 0x00ff00, 0.95);
+    magicCircle.strokeCircle(0, 0, 120); // 60 -> 120
+    magicCircle.lineStyle(2.5, 0x00ff7f, 0.7);
+    magicCircle.strokeCircle(0, 0, 90);  // 45 -> 90
+    magicCircle.strokeRect(-60, -60, 120, 120); // 60x60 -> 120x120
     magicCircle.beginPath();
-    magicCircle.moveTo(-60, 0); magicCircle.lineTo(60, 0);
-    magicCircle.moveTo(0, -60); magicCircle.lineTo(0, 60);
+    magicCircle.moveTo(-120, 0); magicCircle.lineTo(120, 0);
+    magicCircle.moveTo(0, -120); magicCircle.lineTo(0, 120);
     magicCircle.strokePath();
     
     // 讓魔法陣快速旋轉與縮放 (新增中文註解：魔法陣旋轉與向外擴展動畫)
@@ -1555,31 +1601,31 @@ function triggerSuperPlutoExplosion(scene) {
     scene.tweens.add({
         targets: magicCircle,
         angle: 360,
-        scaleX: 1.25,
-        scaleY: 1.25,
+        scaleX: 1.5, // 1.25 -> 1.5
+        scaleY: 1.5,
         duration: 1500,
         ease: 'Quad.easeOut'
     });
 
-    // 4. 收集四周的綠色能量球 (Condensation Phase) (新增中文註解：從螢幕四周凝聚綠色等離子能量球到魔法陣中)
+    // 4. 收集四周的綠色能量球 (Condensation Phase，粒子球數大幅增加) (新增中文註解：從四周凝聚更多粒子球到魔法陣)
     const energyBalls = [];
     const chargeDuration = 1500;
-    const ballCount = 45;
+    const ballCount = 80; // 45 -> 80
     for (let i = 0; i < ballCount; i++) {
         const startX = Phaser.Math.Between(0, width);
         const startY = Phaser.Math.Between(0, height - 200);
         const ball = scene.add.graphics();
         ball.setDepth(9992);
         ball.fillStyle(0x00ff00, 0.85);
-        ball.fillCircle(0, 0, Phaser.Math.Between(4, 9));
+        ball.fillCircle(0, 0, Phaser.Math.Between(5, 11)); // 大小增加
         ball.setPosition(startX, startY);
         energyBalls.push(ball);
 
         // 飛向魔法陣中心縮小淡出
         scene.tweens.add({
             targets: ball,
-            x: width / 2 - 60,
-            y: height - 110,
+            x: playerX,
+            y: playerY,
             scaleX: 0.1,
             scaleY: 0.1,
             alpha: 0.2,
@@ -1591,14 +1637,14 @@ function triggerSuperPlutoExplosion(scene) {
         });
     }
 
-    // 5. 建立畫面上冥王炮衝擊光束 (玩家發射向 Yeah) (層級 9990，高於人物) (新增中文註解：綠色雷射衝擊波)
+    // 5. 建立畫面上冥王炮衝擊光束 (玩家發射向 Yeah，斜向發射) (層級 9990，高於人物) (新增中文註解：綠色斜向雷射衝擊波)
     const beamGfx = scene.add.graphics();
     beamGfx.setDepth(9990);
 
     // 6. 建立全螢幕爆炸閃光層 (螢光綠) (層級 10000，覆蓋全螢幕做瞬時閃光) (新增中文註解：螢光綠爆發閃光層)
     const flashRect = scene.add.graphics();
     flashRect.setDepth(10000);
-    flashRect.fillStyle(0x00ff00, 0.95); // 改為綠色主題
+    flashRect.fillStyle(0x00ff00, 0.95);
     flashRect.fillRect(0, 0, width, height);
 
     // 生成圓形粒子紋理 (新增中文註解：產生圓形粒子)
@@ -1609,62 +1655,66 @@ function triggerSuperPlutoExplosion(scene) {
         pGfx.generateTexture('plutoParticle', 8, 8);
     }
     const particles = scene.add.particles('plutoParticle');
-    particles.setDepth(9995); // 粒子層級 9995，高於光束與黑色背景
+    particles.setDepth(9995); // 粒子層級 9995
 
-    // 粒子發射器 1：Yeah 處的大爆炸 (綠色粒子向四周飛散) (新增中文註解：核心綠色噴射粒子)
+    // 計算斜向雷射的精確角度 (用於引導噴射流)
+    const angleRad = Phaser.Math.Angle.Between(playerX, playerY, yeahX, yeahY);
+    const angleDeg = Phaser.Math.RadToDeg(angleRad);
+
+    // 粒子發射器 1：Yeah 處的大爆炸 (綠色粒子數量暴增至 300 顆) (新增中文註解：核心綠色巨量噴射粒子)
     const emitter1 = particles.createEmitter({
-        x: 150, // 顏王Yeah 在動畫中傳送的位置為左側 150
-        y: height - 110,
-        speed: { min: 200, max: 1000 },
+        x: yeahX,
+        y: yeahY,
+        speed: { min: 300, max: 1200 }, // 速度提升
         angle: { min: 0, max: 360 },
-        scale: { start: 6.0, end: 0 }, // 微調變大
+        scale: { start: 7.0, end: 0 }, // 粒徑變大
         blendMode: 'ADD',
         lifespan: 1600,
-        quantity: 180, // 微調變多
-        frequency: -1, // 一次性發射
-        tint: 0x00ff00 // 綠色
+        quantity: 300, // 180 -> 300
+        frequency: -1,
+        tint: 0x00ff00
     });
 
-    // 粒子發射器 2：Yeah 處的大爆炸 (亮黃綠色耀眼火花) (新增中文註解：外層黃綠爆散星芒)
+    // 粒子發射器 2：Yeah 處的大爆炸 (亮黃綠色耀眼火花，增加至 200 顆) (新增中文註解：外層黃綠爆散星芒)
     const emitter2 = particles.createEmitter({
-        x: 150,
-        y: height - 110,
-        speed: { min: 100, max: 800 },
+        x: yeahX,
+        y: yeahY,
+        speed: { min: 120, max: 900 },
         angle: { min: 0, max: 360 },
-        scale: { start: 4.8, end: 0 },
+        scale: { start: 5.5, end: 0 },
         blendMode: 'ADD',
         lifespan: 1400,
-        quantity: 120,
+        quantity: 200, // 120 -> 200
         frequency: -1,
-        tint: 0xadff2f // 黃綠色
+        tint: 0xadff2f
     });
 
-    // 粒子發射器 3：從玩家處射出的藍綠色高能粒子射流 (新增中文註解：玩家端噴發的藍綠粒子衝擊)
+    // 粒子發射器 3：從玩家空中發射源頭，往顏王Yeah 方向猛烈噴灑的金色/青色粒子射流 (數量增加至 200 顆，且角度精準對齊斜線雷射) (新增中文註解：源頭斜向噴發的粒子流)
     const emitter3 = particles.createEmitter({
-        x: width / 2, // 玩家所在地
-        y: height - 110,
-        speed: { min: 300, max: 1100 },
-        angle: { min: 160, max: 200 }, // 向左方噴射
-        scale: { start: 3.8, end: 0 },
+        x: playerX,
+        y: playerY,
+        speed: { min: 400, max: 1300 },
+        angle: { min: angleDeg - 15, max: angleDeg + 15 }, // 精準指向顏王Yeah
+        scale: { start: 4.8, end: 0 },
         blendMode: 'ADD',
         lifespan: 1200,
-        quantity: 90,
+        quantity: 200, // 90 -> 200
         frequency: -1,
-        tint: 0x00ffff // 藍綠色 (青色)
+        tint: 0x00ffff
     });
 
-    // 粒子發射器 4：Yeah 處的超高速擴散翠綠火花，形成震撼星環 (新增中文註解：高速翠綠粒子環擴散特效)
+    // 粒子發射器 4：Yeah 處的超高速擴散翠綠火花，形成震撼星環 (數量增加至 250 顆) (新增中文註解：高速翠綠星環粒子)
     const emitter4 = particles.createEmitter({
-        x: 150,
-        y: height - 110,
-        speed: { min: 450, max: 1250 },
+        x: yeahX,
+        y: yeahY,
+        speed: { min: 500, max: 1400 },
         angle: { min: 0, max: 360 },
-        scale: { start: 3.0, end: 0 },
+        scale: { start: 4.0, end: 0 },
         blendMode: 'ADD',
         lifespan: 900,
-        quantity: 150,
+        quantity: 250, // 150 -> 250
         frequency: -1,
-        tint: 0x00ff7f // 翠綠色
+        tint: 0x00ff7f
     });
 
     // 釋放扁平衝擊波圈 (新增中文註解：繪製扁平擴散的綠色等離子震波圈)
@@ -1677,8 +1727,8 @@ function triggerSuperPlutoExplosion(scene) {
         
         scene.tweens.add({
             targets: ring,
-            scaleX: 18,
-            scaleY: 8, // 橢圓形扁平擴散
+            scaleX: 20,
+            scaleY: 10, // 橢圓形扁平擴散
             alpha: 0,
             duration: 800,
             ease: 'Quad.easeOut',
@@ -1688,7 +1738,7 @@ function triggerSuperPlutoExplosion(scene) {
         });
     };
 
-    // 延時發射雷射與爆炸效果 (1.5秒凝聚能量後發射) (新增中文註解：設定 1.5秒 蓄能後釋放震撼巨砲與崩壞特效)
+    // 延時發射雷射與爆炸效果 (1.5秒凝聚能量後發射) (新增中文註解：設定 1.5秒 蓄能後釋放斜向巨砲與大核爆)
     let isFiring = false;
     setTimeout(() => {
         isFiring = true;
@@ -1703,8 +1753,8 @@ function triggerSuperPlutoExplosion(scene) {
         const vortexParticles = scene.add.particles('plutoParticle');
         vortexParticles.setDepth(9996);
         const emitterVortex = vortexParticles.createEmitter({
-            x: 150,
-            y: height - 110,
+            x: yeahX,
+            y: yeahY,
             speed: { min: 100, max: 300 },
             scale: { start: 3.5, end: 0 },
             blendMode: 'ADD',
@@ -1724,7 +1774,7 @@ function triggerSuperPlutoExplosion(scene) {
             vortexAngle += 0.3;
             const r = 80 * (1 - (vortexAngle / 20)); // 半徑向內收縮
             if (r > 0) {
-                emitterVortex.setPosition(150 + Math.cos(vortexAngle) * r, height - 110 + Math.sin(vortexAngle) * r);
+                emitterVortex.setPosition(yeahX + Math.cos(vortexAngle) * r, yeahY + Math.sin(vortexAngle) * r);
             }
         }, 16);
 
@@ -1733,10 +1783,10 @@ function triggerSuperPlutoExplosion(scene) {
             vortexParticles.destroy();
         }, 1500);
 
-        // 在發射時，每隔 200ms 產生一個向左擴散的能量環 (共 4 個) (新增中文註解：連環發射等離子擴散波)
+        // 在發射時，每隔 200ms 產生一個能量環 (共 4 個) (新增中文註解：連環發射等離子擴散波)
         for (let r = 0; r < 4; r++) {
             setTimeout(() => {
-                spawnRing(width / 2 - 60, height - 110);
+                spawnRing(playerX, playerY);
             }, r * 200);
         }
 
@@ -1765,7 +1815,7 @@ function triggerSuperPlutoExplosion(scene) {
 
     }, chargeDuration);
 
-    // 繪製與隨時間膨脹的衝擊光束 (新增中文註解：動態更新擴散雷射光束與兩側圍繞的正弦電弧)
+    // 繪製與隨時間膨脹的斜向衝擊光束 (新增中文註解：動態更新擴散斜向雷射光束與兩側圍繞的正弦電弧)
     let beamWidth = 20;
     let arcTime = 0;
     const updateBeam = () => {
@@ -1773,28 +1823,37 @@ function triggerSuperPlutoExplosion(scene) {
         beamGfx.clear();
         arcTime += 0.25;
 
-        // 1. 外圍暗綠能量暈 (新增中文註解：外層深綠色能量擴散效果)
-        beamGfx.fillStyle(0x003300, 0.35);
-        beamGfx.fillRect(150, height - 110 - beamWidth - 25, width / 2 - 150, beamWidth * 2 + 50);
-        // 2. 主光波 (亮綠) (新增中文註解：中層螢光綠主雷射波)
-        beamGfx.fillStyle(0x00ff00, 0.85);
-        beamGfx.fillRect(150, height - 110 - beamWidth, width / 2 - 150, beamWidth * 2);
-        // 3. 光波核心 (超亮白綠色) (新增中文註解：內層白綠色核心雷射)
-        beamGfx.fillStyle(0xe6ffe6, 0.95);
-        beamGfx.fillRect(150, height - 110 - beamWidth / 2, width / 2 - 150, beamWidth);
+        // 計算斜向雷射線段的法向量 (Perpendicular Vector nx, ny)，用於繪製正弦高壓電弧
+        const dx = yeahX - playerX;
+        const dy = yeahY - playerY;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const nx = -dy / len;
+        const ny = dx / len;
 
-        // 4. 繪製兩條螺旋纏繞 of 綠色高壓正弦電弧 (新增中文註解：繪製正弦高壓電弧圍繞光束)
+        // 1. 外圍暗綠能量暈 (新增中文註解：外層深綠色能量擴散效果，繪製斜向線條)
+        beamGfx.lineStyle(beamWidth + 50, 0x003300, 0.35);
+        beamGfx.lineBetween(playerX, playerY, yeahX, yeahY);
+        
+        // 2. 主光波 (亮綠) (新增中文註解：中層螢光綠斜向主雷射波)
+        beamGfx.lineStyle(beamWidth, 0x00ff00, 0.85);
+        beamGfx.lineBetween(playerX, playerY, yeahX, yeahY);
+        
+        // 3. 光波核心 (超亮白綠色) (新增中文註解：內層白綠色核心雷射)
+        beamGfx.lineStyle(beamWidth / 2, 0xe6ffe6, 0.95);
+        beamGfx.lineBetween(playerX, playerY, yeahX, yeahY);
+
+        // 4. 繪製兩條螺旋纏繞在斜向雷射兩側的綠色高壓正弦電弧 (新增中文註解：繪製正弦高壓電弧圍繞斜向光束)
         beamGfx.lineStyle(3, 0x00ff7f, 0.95);
         beamGfx.beginPath();
-        const startX = width / 2 - 60;
-        const endX = 150;
         const segments = 55;
         for (let i = 0; i <= segments; i++) {
             const t = i / segments;
-            const x = startX + (endX - startX) * t;
-            // 正弦波繞著雷射中心上下波動
-            const wave = Math.sin(t * Math.PI * 6 + arcTime) * (beamWidth + 15);
-            const y = (height - 110) + wave;
+            const bx = playerX + dx * t;
+            const by = playerY + dy * t;
+            // 電弧上下波動幅度和頻率
+            const wave = Math.sin(t * Math.PI * 6 + arcTime) * (beamWidth / 2 + 15);
+            const x = bx + nx * wave;
+            const y = by + ny * wave;
             if (i === 0) beamGfx.moveTo(x, y);
             else beamGfx.lineTo(x, y);
         }
@@ -1805,9 +1864,11 @@ function triggerSuperPlutoExplosion(scene) {
         beamGfx.beginPath();
         for (let i = 0; i <= segments; i++) {
             const t = i / segments;
-            const x = startX + (endX - startX) * t;
-            const wave = Math.sin(t * Math.PI * 6 - arcTime + Math.PI) * (beamWidth + 12);
-            const y = (height - 110) + wave;
+            const bx = playerX + dx * t;
+            const by = playerY + dy * t;
+            const wave = Math.sin(t * Math.PI * 6 - arcTime + Math.PI) * (beamWidth / 2 + 12);
+            const x = bx + nx * wave;
+            const y = by + ny * wave;
             if (i === 0) beamGfx.moveTo(x, y);
             else beamGfx.lineTo(x, y);
         }
@@ -1839,7 +1900,7 @@ function triggerSuperPlutoExplosion(scene) {
             particles.destroy();
             magicCircle.destroy(); // 銷毀魔法陣
             
-            // 讓原本的顏王與玩家隱藏，準備進入「排排站爆炸」劇本 (新增中文註解：隱藏原來的顏王與玩家，準備大集體演出)
+            // 讓原本的顏王與玩家隱藏，準備進入「排排站自爆」劇本 (新增中文註解：隱藏原來的顏王與玩家，準備大集體演出)
             if (yeah) {
                 yeah.setActive(false).setVisible(false);
                 if (yeah.body) yeah.body.enable = false;
@@ -1861,7 +1922,7 @@ function triggerSuperPlutoExplosion(scene) {
                 clearInterval(glitchTimer);
                 glitchGfx.destroy();
                 
-                // 6. === 執行全新劇本：所有 Boss 排成一排，下一秒全部同時爆炸 === (新增中文註解：故障效果結束後，執行 Boss 集體排排站與七彩大核爆劇本)
+                // 6. === 執行全新劇本：所有 Boss 排成一排，下一秒依序從左至右大爆炸 === (新增中文註解：故障效果結束後，執行 Boss 集體排排站與七彩大核爆劇本)
                 triggerBossAlignAndExplodeScript(scene);
                 return;
             }
@@ -1939,7 +2000,7 @@ function triggerBossAlignAndExplodeScript(scene) {
 
     // 2. 獨立 Boss 主題色爆炸輔助函式 (新增中文註解：定義個別 Boss 專屬主題色爆炸粒子與相機閃光函數)
     const triggerIndividualExplosion = (bossSprite, tintColor, flashColor) => {
-        if (!bossSprite) return; // 移除 .active 檢查，以確保被暫停停用的 Boss 也能順利自爆 (修正自訂劇本 Bug)
+        if (!bossSprite) return; // 移除 .active 檢查，以確保被暫停停用的 Boss 也能順利自爆
         const bx = bossSprite.x;
         const by = bossSprite.y;
 
@@ -1985,20 +2046,172 @@ function triggerBossAlignAndExplodeScript(scene) {
         }, 1500);
     };
 
-    // 3. 一秒後 (在 500ms + 700ms 後再等待 1.2秒，即 1900ms) 讓四位 Boss 同時自爆！ (新增中文註解：Boss 全員對齊後一秒，四位同時大自爆！)
+    // 3. 一秒後 (在 500ms + 700ms 後再等待 1.2秒，即 1900ms) 讓四位 Boss 從左到右一一自爆！ (新增中文註解：Boss 全員對齊後一秒，四位從左到右依序大自爆！)
     const startExplodeTime = 1900;
     
     setTimeout(() => {
-        // 同時引爆四位 Boss
         triggerIndividualExplosion(loli, 0xff00ff, 0xff00ff); // 蘿莉：紫色自爆
-        triggerIndividualExplosion(uncle, 0x111111, 0x111111); // 大叔：暗黑自爆
-        triggerIndividualExplosion(dora, 0x0000ff, 0x0000ff); // 哆啦：藍色自爆
-        triggerIndividualExplosion(yeah, 0xffff00, 0xffff00); // 顏王：黃色自爆
-
-        // 全螢幕複合閃光與大震動 (四Boss同時引爆)
-        scene.cameras.main.flash(350, 0, 255, 0); // 綠/白複合強光
-        scene.cameras.main.shake(500, 0.04);
+        scene.cameras.main.flash(200, 255, 0, 255); // 紫色閃光
+        scene.cameras.main.shake(250, 0.02);
     }, startExplodeTime);
+
+    setTimeout(() => {
+        triggerIndividualExplosion(uncle, 0x111111, 0x111111); // 大叔：暗黑自爆
+        scene.cameras.main.flash(200, 56, 56, 56); // 暗灰色閃光
+        scene.cameras.main.shake(250, 0.02);
+    }, startExplodeTime + 300);
+
+    setTimeout(() => {
+        triggerIndividualExplosion(dora, 0x0000ff, 0x0000ff); // 哆啦：藍色自爆
+        scene.cameras.main.flash(200, 0, 0, 255); // 藍色閃光
+        scene.cameras.main.shake(250, 0.02);
+    }, startExplodeTime + 600);
+
+    setTimeout(() => {
+        triggerIndividualExplosion(yeah, 0xffff00, 0xffff00); // 顏王：黃色自爆
+        scene.cameras.main.flash(350, 255, 215, 0); // 黃金色終結閃光
+        scene.cameras.main.shake(350, 0.03);
+    }, startExplodeTime + 900);
+
+    // 4. 爆炸完後 1.3 秒，顯現最終感性/鬼畜的字幕與 Alfa-X 作者署名 (新增中文註解：定時觸發最終感性結局字幕)
+    setTimeout(() => {
+        showFinalEndingCredits(scene);
+    }, startExplodeTime + 2200);
+}
+
+/**
+ * 終極感性結局字幕與作者署名 ── 爆炸結束後觸發
+ * 流程：漸顯黑幕 → 逐字打字機特效顯示感性對話 → 下一秒瞬間彈出特大紅光 "DRIVE!!!!!!" 與作者署名 (新增中文註解：終極結局感性字幕與彩蛋)
+ */
+function showFinalEndingCredits(scene) {
+    // 建立全螢幕遮罩 DOM
+    const endContainer = document.createElement('div');
+    endContainer.className = 'final-ending-container';
+    Object.assign(endContainer.style, {
+        position: 'fixed',
+        top: '0',
+        left: '0',
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: '#000000', // 漸顯全黑
+        color: '#ffffff',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        fontFamily: "'Courier New', Courier, monospace, 'Microsoft JhengHei', sans-serif",
+        zIndex: '10006',
+        opacity: '0',
+        transition: 'opacity 1.2s ease',
+        boxSizing: 'border-box',
+        padding: '40px'
+    });
+    document.body.appendChild(endContainer);
+
+    // 漸顯黑幕
+    setTimeout(() => {
+        endContainer.style.opacity = '1';
+    }, 100);
+
+    // 建立打字文字框 (新增中文註解：打字效果文字元件)
+    const typeTextDiv = document.createElement('div');
+    Object.assign(typeTextDiv.style, {
+        fontSize: '28px',
+        lineHeight: '1.8',
+        maxWidth: '850px',
+        textAlign: 'center',
+        marginBottom: '50px',
+        color: '#ffd700', // 金黃色代表終焉的祈禱
+        textShadow: '0 0 8px rgba(255, 215, 0, 0.4)',
+        minHeight: '120px',
+        fontWeight: 'bold'
+    });
+    endContainer.appendChild(typeTextDiv);
+
+    // 欲顯示的打字字幕
+    const fullMsg = "所有Boss已被消滅，你要做什麼，人生意義為Emotional Damage，我建議你放下3C去睡覺吧，除非你真的很想要被...";
+    let charIdx = 0;
+
+    // 字幕打字排程
+    setTimeout(() => {
+        const typeInterval = setInterval(() => {
+            if (charIdx < fullMsg.length) {
+                typeTextDiv.textContent += fullMsg.charAt(charIdx);
+                charIdx++;
+            } else {
+                clearInterval(typeInterval);
+
+                // 打字完成後等待 1 秒 (「下一秒」)，震撼呈現特大 "DRIVE!!!!!!" 與作者署名
+                setTimeout(() => {
+                    // DRIVE 字幕 (新增中文註解：紅色特大 DRIVE 字幕)
+                    const driveDiv = document.createElement('div');
+                    driveDiv.innerText = "DRIVE!!!!!!";
+                    Object.assign(driveDiv.style, {
+                        fontSize: '110px',
+                        fontWeight: 'bold',
+                        color: '#ff0000', // 強烈鮮紅
+                        textShadow: '0 0 20px #ff0000, 0 0 45px #ff0000',
+                        animation: 'drive-glitch 0.12s infinite alternate',
+                        marginBottom: '30px',
+                        opacity: '0',
+                        transform: 'scale(0.4)',
+                        transition: 'all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+                    });
+
+                    // 動態載入 DRIVE 抖動/噪點動畫 CSS (新增中文註解：動態載入 DRIVE Glitch 動畫)
+                    if (!document.getElementById('drive-ending-styles')) {
+                        const styleSheet = document.createElement('style');
+                        styleSheet.id = 'drive-ending-styles';
+                        styleSheet.innerText = `
+                            @keyframes drive-glitch {
+                                0% { transform: translate(2px, 1px) rotate(0deg); }
+                                10% { transform: translate(-1px, -2px) rotate(-1.5deg); }
+                                20% { transform: translate(-3px, 0px) rotate(1.5deg); }
+                                30% { transform: translate(0px, 2px) rotate(0deg); }
+                                40% { transform: translate(1px, -1px) rotate(1.5deg); }
+                                50% { transform: translate(-1px, 2px) rotate(-1.5deg); }
+                                60% { transform: translate(-3px, 1px) rotate(0deg); }
+                                70% { transform: translate(2px, 1px) rotate(-1.5deg); }
+                                80% { transform: translate(-1px, -1px) rotate(1.5deg); }
+                                90% { transform: translate(2px, 2px) rotate(0deg); }
+                                100% { transform: translate(1px, -2px) rotate(-1.5deg); }
+                            }
+                        `;
+                        document.head.appendChild(styleSheet);
+                    }
+
+                    // 作者署名 (新增中文註解：作者署名)
+                    const authorDiv = document.createElement('div');
+                    authorDiv.innerText = "by. Alfa-X";
+                    Object.assign(authorDiv.style, {
+                        fontSize: '32px',
+                        color: '#a0a0a0',
+                        textShadow: '0 0 6px rgba(255, 255, 255, 0.25)',
+                        opacity: '0',
+                        transition: 'opacity 0.8s ease',
+                        fontWeight: 'bold',
+                        letterSpacing: '2px'
+                    });
+
+                    endContainer.appendChild(driveDiv);
+                    endContainer.appendChild(authorDiv);
+
+                    // 啟用漸顯與縮放，並引發相機大震動
+                    setTimeout(() => {
+                        driveDiv.style.opacity = '1';
+                        driveDiv.style.transform = 'scale(1)';
+                        scene.cameras.main.shake(450, 0.035);
+                    }, 50);
+
+                    // 稍微延後漸顯作者署名
+                    setTimeout(() => {
+                        authorDiv.style.opacity = '1';
+                    }, 500);
+
+                }, 1000);
+            }
+        }, 65); // 每個字打字間隔 65 毫秒
+    }, 800);
 }
 
 function createDashShield(scene, player, angle) {
