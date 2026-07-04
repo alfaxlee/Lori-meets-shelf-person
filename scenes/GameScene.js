@@ -12,6 +12,8 @@ import { initUncleRefs, startUncleAttacks, updateUncleAttacks } from '../boss/Un
 import { initUncleStateRefs, uncleState, handleUncleHit, updateUncleStateMachine, respawnUncle } from '../boss/UncleStateMachine.js';
 import { initDoraStateRefs, doraState, handleDoraHit, updateDoraStateMachine, respawnDora, cleanupDora, handleCloneHit } from '../boss/DoraStateMachine.js';
 import { initDoraAttackRefs } from '../boss/DoraAttacks.js';
+import { initYeahStateRefs, yeahState, handleYeahHit, updateYeahStateMachine, respawnYeah, cleanupYeah } from '../boss/YeahStateMachine.js';
+import { initYeahAttackRefs } from '../boss/YeahAttacks.js';
 
 let player;
 let loli;
@@ -27,6 +29,11 @@ let dora;          // 哆啦噩夢 Sprite
 let doraHPText;    // 哆啦噩夢血量文字
 let clone1HPText;  // 哆啦噩夢分身 1 血量文字
 let clone2HPText;  // 哆啦噩夢分身 2 血量文字
+let yeah;          // 顏王Yeah Sprite
+let yeahHPText;    // 顏王Yeah 血量文字
+let yeahEnergyText; // 顏王Yeah 神聖魔法能量條文字
+let yeahEnergyBar;  // 顏王Yeah 神聖魔法能量條 Graphics
+let yeahEnergyBalls; // 顏王Yeah 隨機生成的黃色能量球群組
 
 // --- 武器系統變數 --- (已搬移至 weapons/WeaponManager.js)
 let shockwaves; // 衝擊波群組
@@ -57,6 +64,8 @@ function preloadAssets() {
     this.load.image('dora', './assets/images/哆啦噩夢.png');
     // 載入哆啦噩夢真領域展開背景圖 (本地資源以避免 CORS 載入失敗)
     this.load.image('doraTrueBg', './assets/images/doraTrueBg.jpg');
+    // 載入顏王Yeah 圖片 (使用本地下載的圖片以避開 CORS)
+    this.load.image('yeah', './assets/images/Yeah.jpg');
 }
 
 // 建立遊戲場景（由 GameScene.create 委派呼叫）
@@ -66,6 +75,9 @@ function createScene() {
 
     // 啟用多點觸控 (最多支援 5 點同時操作)
     this.input.addPointer(5);
+
+    // 標記目前是否處於神聖魔法必殺動畫中
+    this.isCinematicActive = false;
 
     // 偵測手機裝置（邏輯已搬至 MobileControls 模組）
     detectMobile(this);
@@ -121,6 +133,16 @@ function createScene() {
     dora.setVisible(false);
     dora.body.enable = false;
 
+    // 建立顏王Yeah
+    yeah = this.physics.add.sprite(3 * width / 4, height - 110, 'yeah');
+    // 使用 setDisplaySize 確保視覺大小與碰撞箱與蘿莉完全一致
+    yeah.setDisplaySize(loli.displayWidth, loli.displayHeight);
+    yeah.setCollideWorldBounds(true);
+    yeah.setBounce(0.1);
+    yeah.setActive(false);
+    yeah.setVisible(false);
+    yeah.body.enable = false;
+
     // 初始化狀態機與攻擊模組的共享參考
     initAttackRefs({ loli, player, shockwaves, lasers, enemyBalls });
     // 傳入 onLoliDeath 回呼：蘿莉死亡後重生同一個蘿莉 (不再輪替)
@@ -132,11 +154,17 @@ function createScene() {
     this.physics.add.collider(loli, platforms);
     this.physics.add.collider(uncle, platforms); // 猥瑣大叔與地板碰撞
     this.physics.add.collider(dora, platforms);  // 哆啦噩夢與地板碰撞
+    this.physics.add.collider(yeah, platforms);  // 顏王Yeah與地板碰撞
 
     // 哆啦噩夢的子彈碰撞
     this.physics.add.collider(dora, mgBullets, (obj1, obj2) => { handleDoraHit(this, obj2, 600, 200, 5); });
     this.physics.add.collider(dora, sgBullets, (obj1, obj2) => { handleDoraHit(this, obj2, 400, 150, 25); });
     this.physics.add.collider(dora, snBullets, (obj1, obj2) => { handleDoraHit(this, obj2, 1500, 500, 50); });
+
+    // 顏王Yeah的子彈碰撞
+    this.physics.add.collider(yeah, mgBullets, (obj1, obj2) => { handleYeahHit(this, obj2, 600, 200, 5); });
+    this.physics.add.collider(yeah, sgBullets, (obj1, obj2) => { handleYeahHit(this, obj2, 400, 150, 25); });
+    this.physics.add.collider(yeah, snBullets, (obj1, obj2) => { handleYeahHit(this, obj2, 1500, 500, 50); });
 
     // 子彈碰撞邏輯
     this.physics.add.collider(mgBullets, platforms);
@@ -188,6 +216,10 @@ function createScene() {
     });
     // 碰到哆啦噩夢也會當機
     this.physics.add.collider(player, dora, () => {
+        triggerCrash();
+    });
+    // 碰到顏王Yeah也會當機 (碰觸即死)
+    this.physics.add.collider(player, yeah, () => {
         triggerCrash();
     });
     this.physics.add.overlap(player, shockwaves, triggerCrash); // 玩家碰到衝擊波也會當機
@@ -274,12 +306,69 @@ function createScene() {
     }).setOrigin(0.5, 0);
     clone2HPText.setVisible(false);
 
+    // 顏王Yeah血量文字 (初始隱藏，設定血量為 1000)
+    yeahHPText = this.add.text(width / 2, 100, `顏王Yeah血量: 1000`, { 
+        fontSize: '30px', 
+        fill: '#ffd700', // 金黃色
+        fontStyle: 'bold', 
+        stroke: '#000', 
+        strokeThickness: 4,
+        padding: { left: 10, right: 10, top: 8, bottom: 8 }
+    }).setOrigin(0.5, 0);
+    yeahHPText.setVisible(false);
+
+    // 顏王Yeah神聖魔法能量條文字標籤
+    yeahEnergyText = this.add.text(width / 2, 140, `神聖魔法能量條`, { 
+        fontSize: '18px', 
+        fill: '#ffd700', 
+        fontStyle: 'bold', 
+        stroke: '#000', 
+        strokeThickness: 3,
+        padding: { left: 10, right: 10, top: 4, bottom: 4 }
+    }).setOrigin(0.5, 0);
+    yeahEnergyText.setVisible(false);
+
+    // 顏王Yeah神聖魔法能量條 Graphics 繪圖元件
+    yeahEnergyBar = this.add.graphics();
+    yeahEnergyBar.setVisible(false);
+
+    // 顏王Yeah神聖魔法能量球群組 (Physics Group)
+    yeahEnergyBalls = this.physics.add.group();
+
+    // 玩家碰到能量球的重疊碰撞判定
+    this.physics.add.overlap(player, yeahEnergyBalls, (p, ball) => {
+        // 碰到後消失
+        ball.destroy();
+
+        // 總共需要碰到 8 顆球來填滿能量條
+        if (yeahState.collectedBalls < 8) {
+            yeahState.collectedBalls++;
+            yeahState.holyEnergy = (yeahState.collectedBalls / 8) * 100;
+        }
+
+        // 收集時螢幕發出淡淡的金黃色閃爍光芒
+        this.cameras.main.flash(100, 255, 215, 0, false);
+
+        // 收集滿 8 顆能量球後，觸發神聖魔法必殺動畫
+        if (yeahState.collectedBalls >= 8) {
+            triggerHolyCinematic(this, player, yeah);
+        }
+    });
+
     // 初始化哆啦噩夢狀態機與參考 (傳入 platforms 以便子彈能做碰撞銷毀判定，傳入子彈群組供分身碰撞偵測，傳入分身血量文字)
     initDoraStateRefs({ dora, player, doraHPText, clone1HPText, clone2HPText, platforms, mgBullets, sgBullets, snBullets, onDoraDeath: (scene) => {
         respawnDora(scene);
     }});
     // 初始化哆啦噩夢攻擊模組參考 (與狀態機使用相同的遊戲物件)
     initDoraAttackRefs({ dora, player, doraHPText, clone1HPText, clone2HPText, platforms });
+
+    // 初始化顏王Yeah狀態機與參考 (傳入能量條文字、繪圖與能量球群組物件，以便控制顯示與重置)
+    initYeahStateRefs({ yeah, player, yeahHPText, yeahEnergyText, yeahEnergyBar, yeahEnergyBalls, platforms, onYeahDeath: (scene) => {
+        respawnYeah(scene);
+    }});
+    // 初始化顏王Yeah攻擊模組參考
+    initYeahAttackRefs({ yeah, player, yeahHPText, platforms });
+
     // 初始化猥瑣大叔狀態機參考
     initUncleStateRefs({ uncle, uncleHPText, onUncleDeath: (scene) => {
         // 擊敗大叔後在大叔左側出生點直接重生大叔 (不再輪替)
@@ -316,34 +405,60 @@ function createScene() {
 
     // 根據選定要挑战的 Boss 進行分支初始化
     if (this.selectedBoss === 'uncle') {
-        // 隱藏並完全停用蘿莉與哆啦噩夢
+        // 隱藏並完全停用其它 Boss
         loli.setActive(false); loli.setVisible(false); loli.body.enable = false;
         dora.setActive(false); dora.setVisible(false); dora.body.enable = false;
+        yeah.setActive(false); yeah.setVisible(false); yeah.body.enable = false;
 
         // 隱藏蘿莉 HP，顯示大叔 HP，並直接生成大叔在左側
         showLoliHPText(false);
         uncleHPText.setVisible(true);
+        yeahHPText.setVisible(false);
         const spawnX = width / 4;
         const spawnY = height - 150;
         respawnUncle(this, spawnX, spawnY);
     } else if (this.selectedBoss === 'dora') {
-        // 隱藏蘿莉與大叔
+        // 隱藏其它 Boss
         loli.setActive(false); loli.setVisible(false); loli.body.enable = false;
         uncle.setActive(false); uncle.setVisible(false); uncle.body.enable = false;
+        yeah.setActive(false); yeah.setVisible(false); yeah.body.enable = false;
         
         showLoliHPText(false);
         uncleHPText.setVisible(false);
+        yeahHPText.setVisible(false);
         doraHPText.setVisible(true); // 顯示哆啦噩夢 HP
         
         // 重置領域狀態與重新產生哆啦噩夢
         cleanupDora(this);
         respawnDora(this);
+    } else if (this.selectedBoss === 'yeah') {
+        // 隱藏其它 Boss
+        loli.setActive(false); loli.setVisible(false); loli.body.enable = false;
+        uncle.setActive(false); uncle.setVisible(false); uncle.body.enable = false;
+        dora.setActive(false); dora.setVisible(false); dora.body.enable = false;
+
+        showLoliHPText(false);
+        uncleHPText.setVisible(false);
+        doraHPText.setVisible(false);
+        yeahHPText.setVisible(true);       // 顯示顏王Yeah HP
+        yeahEnergyText.setVisible(true);   // 顯示顏王Yeah 神聖魔法能量條文字
+
+        // 重新產生顏王Yeah
+        cleanupYeah(this);
+        respawnYeah(this);
     } else {
-        // 預設為蘿莉局：顯示蘿莉 HP，大叔與哆啦噩夢保持隱藏與停用
+        // 預設為蘿莉局：顯示蘿莉 HP，大叔與其它 Boss 保持隱藏與停用
         showLoliHPText(true);
         uncleHPText.setVisible(false);
-        doraHPText.setVisible(false); // 隱藏哆啦噩夢 HP
+        doraHPText.setVisible(false);
+        yeahHPText.setVisible(false);
+        yeahEnergyText.setVisible(false);  // 隱藏顏王Yeah 能量條文字
+        if (yeahEnergyBar) {
+            yeahEnergyBar.clear();         // 清除能量條
+            yeahEnergyBar.setVisible(false);
+        }
         dora.setActive(false); dora.setVisible(false); dora.body.enable = false;
+        yeah.setActive(false); yeah.setVisible(false); yeah.body.enable = false;
     }
 }
 
@@ -351,8 +466,19 @@ function createScene() {
 
 // 每幀更新邏輯（由 GameScene.update 委派呼叫）
 function updateScene(time, delta) {
+    if (this.isCinematicActive) {
+        // 動畫期間強行凍結玩家與顏王Yeah，不允許任何輸入與移動，且不受到重力影響
+        player.setVelocity(0, 0);
+        if (player.body) player.body.allowGravity = false;
+        if (yeah && yeah.active) {
+            yeah.setVelocity(0, 0);
+            if (yeah.body) yeah.body.allowGravity = false;
+        }
+        return;
+    }
+
     // 依據當前選定 Boss 決定自動瞄準目標與碰撞對象
-    const activeBoss = this.selectedBoss === 'uncle' ? uncle : (this.selectedBoss === 'dora' ? dora : loli);
+    const activeBoss = this.selectedBoss === 'uncle' ? uncle : (this.selectedBoss === 'dora' ? dora : (this.selectedBoss === 'yeah' ? yeah : loli));
 
     // 繪製衝刺能量條（委派給 HUD 模組）
     drawEnergyBar(playerState.dashEnergy, playerState.maxDashEnergy, playerState.dashEnergyColor);
@@ -457,13 +583,481 @@ function updateScene(time, delta) {
     if (dora && dora.active) {
         updateDoraStateMachine(this, time, delta);
     }
+
+    // 更新顏王Yeah邏輯
+    if (yeah && yeah.active) {
+        updateYeahStateMachine(this, time, delta);
+        
+        // 僅呼叫繪製函數 (能量的增長已改由玩家碰撞能量球觸發)
+        
+        // 繪製神聖魔法能量條
+        drawYeahEnergyBar(this);
+    }
+}
+
+/**
+ * 繪製顏王Yeah 的神聖魔法能量條 (金黃色發光質感進度條)
+ */
+function drawYeahEnergyBar(scene) {
+    if (!yeahEnergyBar) return;
+    yeahEnergyBar.clear();
+
+    if (!yeah || !yeah.active) {
+        yeahEnergyBar.setVisible(false);
+        return;
+    }
+
+    yeahEnergyBar.setVisible(true);
+
+    const width = scene.cameras.main.width;
+    const barWidth = 300; // 能量條總寬度 300px
+    const barHeight = 16; // 能量條高度 16px
+    const x = width / 2 - barWidth / 2; // 居中對齊
+    const y = 175; // 位於神聖魔法能量條文字 (Y=140) 下方的 Y=175 處
+
+    // 1. 繪製能量條背景 (深灰色半透明底板，呈現高級磨砂感)
+    yeahEnergyBar.fillStyle(0x222222, 0.8);
+    yeahEnergyBar.fillRect(x, y, barWidth, barHeight);
+
+    // 2. 繪製金黃色充能部分 (根據 holyEnergy 比例繪製)
+    const progressWidth = barWidth * (yeahState.holyEnergy / 100);
+    if (progressWidth > 0) {
+        yeahEnergyBar.fillStyle(0xffd700, 1.0); // 純金黃色代表神聖能量
+        yeahEnergyBar.fillRect(x, y, progressWidth, barHeight);
+    }
+
+    // 3. 繪製外框 (細白色半透明邊框)
+    yeahEnergyBar.lineStyle(2, 0xffffff, 0.8);
+    yeahEnergyBar.strokeRect(x, y, barWidth, barHeight);
+}
+
+/**
+ * 神聖魔法必殺動畫 ── 收集滿 8 顆能量球後觸發
+ * 流程：凍結玩家 → 畫面變全黑 + 祈禱文字 (加大字型) → 傳送角色與 Boss → 魔法陣 + 天降光束 → 延遲後電腦當機
+ */
+function triggerHolyCinematic(scene, playerSprite, yeahSprite) {
+    const width = scene.cameras.main.width;
+    const height = scene.cameras.main.height;
+
+    // === 第一階段：進入必殺動畫狀態，凍結玩家與 Boss ===
+    // 立即手動更新繪製能量條，確保畫面上能看到能量條完全填滿的 100% 狀態
+    drawYeahEnergyBar(scene);
+
+    scene.isCinematicActive = true;
+
+    playerSprite.setVelocity(0, 0);
+    playerSprite.body.allowGravity = false; // 暫時取消重力讓玩家定住
+    playerState.isInvincible = true;        // 動畫期間無敵
+
+    // 清除場上殘留的能量球
+    if (yeahEnergyBalls) yeahEnergyBalls.clear(true, true);
+
+    // 凍結顏王Yeah 的移動
+    if (yeahSprite && yeahSprite.active) {
+        yeahSprite.setVelocity(0, 0);
+        yeahSprite.body.allowGravity = false;
+    }
+
+    // === 第二階段：黑幕遮罩 (完全黑色) + 祈禱文字逐行顯示 ===
+    // 必須將 fillAlpha 設為 1.0，改由 GameObject 的 alpha 控制淡入，否則填滿透明度為 0 時即使改變 global alpha 也依然透明
+    const overlay = scene.add.rectangle(width / 2, height / 2, width, height, 0x000000, 1.0);
+    overlay.setAlpha(0); // 初始全透明
+    overlay.setDepth(9998);
+
+    // 淡入黑幕到完全黑色 (不透明度 1.0)
+    scene.tweens.add({
+        targets: overlay,
+        alpha: 1.0,
+        duration: 500,
+        onComplete: () => {
+            // 祈禱文字的五行內容
+            const lines = [
+                '在此為胖嘟嘟發電機獻上祈禱',
+                '請賜予我聖靈之力',
+                '傾聽我的願望',
+                '萬物歸盡',
+                '顏值崩壞'
+            ];
+
+            let currentLine = 0;
+
+            // 逐行顯示函式
+            const showNextLine = () => {
+                if (currentLine >= lines.length) {
+                    // 所有文字顯示完畢，進入第三階段
+                    scene.time.delayedCall(500, () => {
+                        // 淡出黑幕
+                        scene.tweens.add({
+                            targets: overlay,
+                            alpha: 0,
+                            duration: 300,
+                            onComplete: () => {
+                                overlay.destroy();
+                                // 進入傳送與魔法陣光束階段
+                                triggerDivineBeam(scene, playerSprite, yeahSprite);
+                            }
+                        });
+                    });
+                    return;
+                }
+
+                const isLastLine = currentLine === lines.length - 1;
+                const displayDuration = isLastLine ? 2000 : 1000; // 最後一行顯示 2 秒，其他 1 秒
+
+                // 建立祈禱文字 (極大字型，鋪滿螢幕寬度，呈現史詩感)
+                const textStyle = {
+                    fontSize: isLastLine ? '120px' : '80px', // 所有文字大幅度放大
+                    fill: '#ffd700',
+                    fontStyle: 'bold',
+                    stroke: isLastLine ? '#ffaa00' : '#000',
+                    strokeThickness: isLastLine ? 15 : 10, // 配合大字體加粗邊框
+                    padding: { left: 20, right: 20, top: 20, bottom: 20 }
+                };
+
+                // 如果是最後一行，加入金色光暈陰影效果
+                if (isLastLine) {
+                    textStyle.shadow = {
+                        color: '#ffd700',
+                        fill: true,
+                        offsetX: 0,
+                        offsetY: 0,
+                        blur: 35
+                    };
+                }
+
+                const lineText = scene.add.text(width / 2, height / 2, lines[currentLine], textStyle)
+                    .setOrigin(0.5)
+                    .setDepth(9999)
+                    .setAlpha(0);
+
+                // 淡入文字
+                scene.tweens.add({
+                    targets: lineText,
+                    alpha: 1,
+                    duration: 300,
+                    onComplete: () => {
+                        // 如果是最後一行，加入一路變大不縮回的特寫放大動畫
+                        if (isLastLine) {
+                            scene.tweens.add({
+                                targets: lineText,
+                                scaleX: 1.5, // 最終放大到 1.5 倍
+                                scaleY: 1.5,
+                                duration: 2000, // 用滿整行字幕顯示的 2 秒時間
+                                ease: 'Quad.easeOut' // 平滑漸緩放大
+                            });
+                        }
+
+                        // 等待指定時間後淡出並顯示下一行
+                        scene.time.delayedCall(displayDuration, () => {
+                            scene.tweens.add({
+                                targets: lineText,
+                                alpha: 0,
+                                duration: 200,
+                                onComplete: () => {
+                                    lineText.destroy();
+                                    currentLine++;
+                                    showNextLine();
+                                }
+                            });
+                        });
+                    }
+                });
+            };
+
+            // 開始顯示第一行
+            showNextLine();
+        }
+    });
+}
+
+/**
+ * 神聖光束攻擊 ── 祈禱文字結束後觸發
+ * 流程：傳送角色與 Boss → 生成上下黃色魔法陣 → 天降金色巨大光束 4 秒 (加長) → 觸發當機
+ */
+function triggerDivineBeam(scene, playerSprite, yeahSprite) {
+    const width = scene.cameras.main.width;
+    const height = scene.cameras.main.height;
+
+    // === 第三階段：傳送角色與 Boss ===
+    // 顏王Yeah 傳送到戰場的左側旁邊
+    if (yeahSprite && yeahSprite.active) {
+        yeahSprite.setPosition(150, height - 110);
+        yeahSprite.body.allowGravity = false; // 保持關閉重力，防止他移動或落下
+    }
+
+    // 玩家被傳送到畫面的最中間
+    playerSprite.setPosition(width / 2, height - 110);
+
+    // 重新取得傳送後的玩家座標，以精確繪製魔法陣和光束
+    const px = playerSprite.x;
+    const py = playerSprite.y;
+
+    // 初始化儲存魔法陣與鎖鏈元件的群組陣列
+    const magicCircles = [];
+
+    // === 0. 建立由上黃（金色）到下黑的垂直漸層背景 ===
+    const bgGradient = scene.add.graphics();
+    // fillGradientStyle(topLeftColor, topRightColor, bottomLeftColor, bottomRightColor, topLeftAlpha, topRightAlpha, bottomLeftAlpha, bottomRightAlpha)
+    bgGradient.fillGradientStyle(0xffd700, 0xffd700, 0x000000, 0x000000, 0.9, 0.9, 0.9, 0.9);
+    bgGradient.fillRect(0, 0, width, height);
+    bgGradient.setDepth(9980); // 置於魔法陣與光束下方，但高於原有地圖背景與物件
+    bgGradient.setAlpha(0);    // 初始透明
+    magicCircles.push(bgGradient);
+
+    // 漸層背景淡入
+    scene.tweens.add({
+        targets: bgGradient,
+        alpha: 1.0,
+        duration: 400
+    });
+
+    // 提升玩家與顏王Yeah 的渲染層級，使他們高於漸層背景 (9980) 並且顯示在漸層之上，確保不會跟著地板一起消失
+    playerSprite.setDepth(9985);
+    playerSprite.setVisible(true);
+    playerSprite.setAlpha(1.0); // 確保玩家在施法開始時完全不透明
+    if (yeahSprite && yeahSprite.active) {
+        yeahSprite.setDepth(9985);
+        yeahSprite.setVisible(true);
+        yeahSprite.setAlpha(1.0);
+    }
+
+    // === 1. 上方浮空魔法陣：高高在天空且有很多層 (5 層) ===
+    const skyLayers = 5;
+    for (let i = 0; i < skyLayers; i++) {
+        // Y 座標高高在天空中，間距為 60px (範圍約 -120 到 -360)
+        const yOffset = -120 - i * 60;
+
+        // 使用 Graphics 繪製魔法陣圓環
+        const circle = scene.add.graphics();
+        circle.setDepth(9990);
+
+        // 調整寬度為螢幕寬度的 1/2，每一層向上稍微縮小以呈現漸層縮小疊加感 (最底層 0.6 倍，最頂層 1.0 倍)
+        const ellipseWidth = (width / 2) * (0.6 + i * 0.1);
+        const ellipseHeight = ellipseWidth * 0.25;
+
+        // 外圈
+        circle.lineStyle(3, 0xffd700, 0.9);
+        circle.strokeEllipse(px, py + yOffset, ellipseWidth, ellipseHeight);
+        // 內圈
+        circle.lineStyle(2, 0xffaa00, 0.6);
+        circle.strokeEllipse(px, py + yOffset, ellipseWidth * 0.6, ellipseHeight * 0.6);
+        // 核心圈
+        circle.lineStyle(1, 0xffffff, 0.5);
+        circle.strokeEllipse(px, py + yOffset, ellipseWidth * 0.3, ellipseHeight * 0.3);
+
+        circle.setAlpha(0);
+        magicCircles.push(circle);
+
+        // 浮空魔法陣淡入動畫
+        scene.tweens.add({
+            targets: circle,
+            alpha: 1,
+            duration: 400,
+            delay: i * 100 // 依序淡入
+        });
+    }
+
+    // === 2. 下方地面魔法陣：只需要一層，位於玩家所在地的地上 ===
+    const groundYOffset = 40; // 位於玩家腳底下方的地面高度
+    const groundCircle = scene.add.graphics();
+    groundCircle.setDepth(9990);
+
+    const groundWidth = width / 2; // 寬度精準為螢幕的 1/2
+    const groundHeight = groundWidth * 0.25;
+
+    // 繪製地面魔法陣外圈
+    groundCircle.lineStyle(4, 0xffd700, 0.95);
+    groundCircle.strokeEllipse(px, py + groundYOffset, groundWidth, groundHeight);
+    // 繪製地面魔法陣內圈
+    groundCircle.lineStyle(2, 0xffaa00, 0.75);
+    groundCircle.strokeEllipse(px, py + groundYOffset, groundWidth * 0.6, groundHeight * 0.6);
+    // 繪製地面魔法陣核心圈
+    groundCircle.lineStyle(1, 0xffffff, 0.6);
+    groundCircle.strokeEllipse(px, py + groundYOffset, groundWidth * 0.3, groundHeight * 0.3);
+
+    groundCircle.setAlpha(0);
+    magicCircles.push(groundCircle);
+
+    // 地面魔法陣淡入
+    scene.tweens.add({
+        targets: groundCircle,
+        alpha: 1,
+        duration: 400,
+        delay: 500
+    });
+
+    // === 3. 旁邊生成五個直立金色鎖鏈，連接最頂層與最底層地面魔法陣 ===
+    const chainGfx = scene.add.graphics();
+    chainGfx.setDepth(9989); // 位於魔法陣正下方
+    chainGfx.setAlpha(0);
+
+    // 繪製單條黃金鎖鏈的輔助函式 (由多個金黃色橢圓環扣環組成)
+    const drawChainLink = (x1, y1, x2, y2) => {
+        const dist = Phaser.Math.Distance.Between(x1, y1, x2, y2);
+        const steps = Math.max(5, Math.floor(dist / 14));
+        for (let s = 0; s <= steps; s++) {
+            const t = s / steps;
+            const cx = x1 + (x2 - x1) * t;
+            const cy = y1 + (y2 - y1) * t;
+            chainGfx.lineStyle(3, 0xffd700, 0.9); // 金黃色鏈環
+            chainGfx.strokeEllipse(cx, cy, 14, 8);
+            chainGfx.lineStyle(1, 0xffffff, 0.6);  // 鏈條高光
+            chainGfx.strokeEllipse(cx, cy, 10, 5);
+        }
+    };
+
+    // 均勻分佈 5 個方向的鎖鏈角度 (對應橢圓圓周)
+    const angles = [
+        0,                 // 右
+        0.4 * Math.PI,     // 前右
+        0.8 * Math.PI,     // 前左
+        1.2 * Math.PI,     // 後左
+        1.6 * Math.PI      // 後右
+    ];
+
+    angles.forEach(angle => {
+        // 最上層天空魔法陣 (第 5 層，索引 4) 的 Y 位移為 -120 - 4 * 60 = -360
+        const yOffsetTop = -360;
+
+        // 鎖鏈起點：最上層天空魔法陣的橢圓周界點
+        const xStart = px + (groundWidth / 2) * Math.cos(angle);
+        const yStart = (py + yOffsetTop) + (groundHeight / 2) * Math.sin(angle);
+
+        // 鎖鏈終點：直立向下連接到最底層地面魔法陣的對應橢圓周界點 (x 座標相同，呈現筆直效果)
+        const xEnd = px + (groundWidth / 2) * Math.cos(angle);
+        const yEnd = (py + groundYOffset) + (groundHeight / 2) * Math.sin(angle);
+
+        drawChainLink(xStart, yStart, xEnd, yEnd);
+    });
+
+    magicCircles.push(chainGfx); // 將鎖鏈元件加入清除清單，在結束時一併銷毀
+
+    // 鎖鏈淡入動畫
+    scene.tweens.add({
+        targets: chainGfx,
+        alpha: 1,
+        duration: 500,
+        delay: 600
+    });
+
+    // === 4. 顏王Yeah 往玩家/魔法陣方向散發出黃色粒子光芒 ===
+    // 在 scene 中動態生成一個圓形粒子材質 (方便 tint 黃色)
+    if (!scene.textures.exists('yellowParticle')) {
+        const pGraphics = scene.make.graphics({ x: 0, y: 0, add: false });
+        pGraphics.fillStyle(0xffffff, 1.0);
+        pGraphics.fillCircle(3, 3, 3);
+        pGraphics.generateTexture('yellowParticle', 6, 6);
+    }
+
+    const particles = scene.add.particles('yellowParticle');
+    particles.setDepth(9995); // 粒子顯示在最上層
+
+    // 計算從顏王Yeah 到玩家/地面魔法陣中心的角度
+    const angleRad = Phaser.Math.Angle.Between(yeahSprite.x, yeahSprite.y, px, py + groundYOffset);
+    const angleDeg = Phaser.Math.RadToDeg(angleRad);
+
+    // 建立粒子發射器，朝魔法陣呈寬度 80 度的扇形噴灑金色粒子光芒
+    const emitter = particles.createEmitter({
+        x: yeahSprite.x,
+        y: yeahSprite.y,
+        speed: { min: 150, max: 450 }, // 擴大速度範圍，使得扇形粒子分布在徑向上更有層次
+        angle: { min: angleDeg - 40, max: angleDeg + 40 }, // 左右各張開 40 度，形成明顯的 80 度扇形覆蓋
+        scale: { start: 2.0, end: 0 },
+        blendMode: 'ADD',
+        lifespan: 1200,
+        frequency: 15, // 縮短發射間隔，增加扇形粒子密度
+        tint: 0xffd700 // 金黃色粒子
+    });
+
+    magicCircles.push(particles); // 將粒子系統一併加入清除清單
+
+    // 螢幕閃白代表魔法蓄力完成
+    scene.time.delayedCall(800, () => {
+        scene.cameras.main.flash(300, 255, 255, 200, false);
+    });
+
+    // === 1 秒後天降巨大金色光束打在玩家身上，持續 4 秒 (拉長生存衝擊感) ===
+    scene.time.delayedCall(1000, () => {
+        // 讓玩家漸漸變透明，配合光束打下去的 4 秒時間，在死掉 (當機) 的瞬間剛好完全透明
+        scene.tweens.add({
+            targets: playerSprite,
+            alpha: 0,
+            duration: 4000, // 4 秒內完全透明 (與光束持續時間完美契合)
+            ease: 'Linear'
+        });
+
+        // 建立光束 Graphics
+        const beam = scene.add.graphics();
+        beam.setDepth(9991);
+
+        // 繪製從天花板到玩家位置的巨大光束 (寬度 80px 的金色半透明矩形)
+        const beamWidth = 80;
+        const beamX = px - beamWidth / 2;
+
+        // 光束主體 (金黃色半透明)
+        beam.fillStyle(0xffd700, 0.7);
+        beam.fillRect(beamX, 0, beamWidth, py + 50);
+        // 光束核心 (更亮的白金色)
+        beam.fillStyle(0xffffff, 0.4);
+        beam.fillRect(beamX + 15, 0, beamWidth - 30, py + 50);
+        // 光束外層擴散 (淡金色)
+        beam.fillStyle(0xffd700, 0.2);
+        beam.fillRect(beamX - 20, 0, beamWidth + 40, py + 50);
+
+        beam.setAlpha(0);
+
+        // 光束淡入動畫
+        scene.tweens.add({
+            targets: beam,
+            alpha: 1,
+            duration: 200
+        });
+
+        // 光束閃爍脈衝效果 (延長為 4 秒)
+        scene.tweens.add({
+            targets: beam,
+            alpha: { from: 0.7, to: 1.0 },
+            duration: 150,
+            yoyo: true,
+            repeat: 24, // 增加脈衝閃爍次數
+            delay: 200
+        });
+
+        // 螢幕持續震動代表強烈衝擊 (延長為 4 秒)
+        scene.cameras.main.shake(4000, 0.015);
+
+        // 4 秒後清除光束與魔法陣，觸發當機畫面
+        scene.time.delayedCall(4000, () => {
+            // 清除所有魔法陣、鎖鏈與粒子系統
+            magicCircles.forEach(c => { if (c && c.destroy) c.destroy(); });
+
+            // 淡出光束
+            scene.tweens.add({
+                targets: beam,
+                alpha: 0,
+                duration: 200,
+                onComplete: () => {
+                    beam.destroy();
+
+                    // 恢復玩家重力 (雖然馬上要當機了)
+                    playerSprite.body.allowGravity = true;
+                    playerState.isInvincible = false;
+
+                    // 觸發電腦當機畫面 (force = true 強制當機，無視無敵)
+                    if (scene.triggerCrash) {
+                        scene.triggerCrash(true);
+                    }
+                }
+            });
+        });
+    });
 }
 
 // createShockwaves / spawnLaser / spawnEnemyBall / createDashDust 已搬移至 boss/LoliAttacks.js 和 player/DashEffects.js
 
 
 function createDashShield(scene, player, angle) {
-    const shield = scene.add.graphics(); let hasHitLoli = false; let hasHitUncle = false; let hasHitDora = false; let alive = true;
+    const shield = scene.add.graphics(); let hasHitLoli = false; let hasHitUncle = false; let hasHitDora = false; let hasHitYeah = false; let alive = true;
     scene.time.delayedCall(1150, () => { alive = false; });
     const onUpdate = () => {
         if (!alive || !player.active) { shield.destroy(); scene.events.off('update', onUpdate); return; }
@@ -499,6 +1093,14 @@ function createDashShield(scene, player, angle) {
             if (distD < radius + 40) {
                 handleDoraHit(scene, null, 1500, 500, 25, centerX, centerY);
                 hasHitDora = true;
+            }
+        }
+        // 護盾碰撞顏王Yeah
+        if (!hasHitYeah && yeah && yeah.active) {
+            const distY = Phaser.Math.Distance.Between(centerX, centerY, yeah.x, yeah.y);
+            if (distY < radius + 40) {
+                handleYeahHit(scene, null, 1500, 500, 25, centerX, centerY);
+                hasHitYeah = true;
             }
         }
         // 護盾碰撞分身 (分身會受到 25 點傷害)
