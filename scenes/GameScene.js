@@ -1390,15 +1390,15 @@ function showDeathSelectionScreen(scene) {
                     animation: green-fire 0.8s infinite alternate;
                 }
                 .burning-line.highlight {
-                    font-size: 56px;
+                    font-size: 96px;
                     color: #ccffcc;
-                    letter-spacing: 8px;
+                    letter-spacing: 14px;
                     margin-top: 40px;
                 }
                 @keyframes green-fire-strong {
-                    0% { text-shadow: 0 0 12px #adff2f, 0 -5px 18px #00ff00, 0 -10px 28px #00ff7f, 0 -15px 45px #008000; }
-                    50% { text-shadow: 0 0 20px #adff2f, 0 -8px 25px #00ff00, 0 -15px 35px #00ff7f, 0 -22px 60px #008000; }
-                    100% { text-shadow: 0 0 12px #adff2f, 0 -5px 18px #00ff00, 0 -10px 28px #00ff7f, 0 -15px 45px #008000; }
+                    0% { text-shadow: 0 0 20px #adff2f, 0 -8px 30px #00ff00, 0 -16px 50px #00ff7f, 0 -24px 70px #008000, 0 0 80px rgba(0,255,0,0.3); }
+                    50% { text-shadow: 0 0 35px #adff2f, 0 -12px 45px #00ff00, 0 -24px 65px #00ff7f, 0 -36px 90px #008000, 0 0 120px rgba(0,255,0,0.4); }
+                    100% { text-shadow: 0 0 20px #adff2f, 0 -8px 30px #00ff00, 0 -16px 50px #00ff7f, 0 -24px 70px #008000, 0 0 80px rgba(0,255,0,0.3); }
                 }
                 .burning-line.highlight.active {
                     animation: green-fire-strong 0.6s infinite alternate;
@@ -1454,8 +1454,8 @@ function showDeathSelectionScreen(scene) {
                         const p = document.createElement('div');
                         const colors = ['#00ff00', '#32cd32', '#00ff7f', '#adff2f'];
                         const color = colors[Math.floor(Math.random() * colors.length)];
-                        // 大幅增加粒徑，從 random * 15 + 8 改為 random * 22 + 12
-                        const size = Math.random() * 22 + 12; // 更大粒徑 of green flame particle
+                        // 超大粒徑，讓火焰粒子更有壓迫感
+                        const size = Math.random() * 40 + 25; // 最大 65px 的巨型火焰粒子
                         
                         Object.assign(p.style, {
                             position: 'absolute',
@@ -1466,7 +1466,7 @@ function showDeathSelectionScreen(scene) {
                             left: (Math.random() * 60 + 20) + '%', // 文字周圍隨機 X
                             top: (Math.random() * 40 + 30) + '%', // 文字高度範圍 Y
                             opacity: Math.random() * 0.7 + 0.3,
-                            boxShadow: `0 0 15px ${color}, 0 0 35px ${color}`,
+                            boxShadow: `0 0 25px ${color}, 0 0 50px ${color}, 0 0 80px ${color}`,
                             pointerEvents: 'none',
                             transition: 'all 1.8s ease-out'
                         });
@@ -1474,7 +1474,7 @@ function showDeathSelectionScreen(scene) {
                         
                         // 使粒子向上噴散淡出 (新增中文註解：使粒子產生向上的拋物飄散與縮小淡出效果)
                         setTimeout(() => {
-                            p.style.transform = `translate(${(Math.random() * 400 - 200)}px, ${(Math.random() * -500 - 200)}px) scale(0.1)`;
+                            p.style.transform = `translate(${(Math.random() * 600 - 300)}px, ${(Math.random() * -700 - 300)}px) scale(0.1)`;
                             p.style.opacity = '0';
                         }, 50);
                         
@@ -1832,11 +1832,51 @@ function triggerSuperPlutoExplosion(scene) {
                     emitter2.explode();
                     emitter4.explode();
 
-                    // 觸發顏王 Yeah 處的翠綠黑洞吸入漩渦粒子 (新增中文註解：撞擊點產生吸入漩渦)
+                    // 1. 建立代表黑洞的視覺圖形與跟隨的位置座標 (新增中文註解：建立黑洞圖形與位置座標)
+                    const blackHoleGfx = scene.add.graphics();
+                    blackHoleGfx.setDepth(9996);
+                    const bhPos = { x: yeahX, y: yeahY };
+
+                    // 繪製黑洞視覺效果的輔助函數 (新增中文註解：繪製多層綠色黑洞吸積盤效果)
+                    const drawBlackHole = (scale = 1.0) => {
+                        blackHoleGfx.clear();
+                        
+                        // 外圍發光暈 (綠色半透明)
+                        blackHoleGfx.fillStyle(0x00ff00, 0.15 * scale);
+                        blackHoleGfx.fillCircle(0, 0, 75 * scale);
+                        
+                        // 中層吸積盤發光圈 (萊姆綠)
+                        blackHoleGfx.fillStyle(0xadff2f, 0.35 * scale);
+                        blackHoleGfx.fillCircle(0, 0, 45 * scale);
+                        
+                        // 內層超強引力圈 (亮綠)
+                        blackHoleGfx.fillStyle(0x00ff7f, 0.7 * scale);
+                        blackHoleGfx.fillCircle(0, 0, 25 * scale);
+                        
+                        // 核心事件視界 (純黑)
+                        blackHoleGfx.fillStyle(0x000000, 1.0);
+                        blackHoleGfx.fillCircle(0, 0, 18 * scale);
+                        
+                        // 旋轉吸積電漿弧線細節
+                        blackHoleGfx.lineStyle(2, 0x00ff00, 0.8);
+                        const segments = 3;
+                        const time = scene.time.now * 0.005;
+                        for(let a = 0; a < segments; a++) {
+                            const startAng = time + (a * Math.PI * 2 / segments);
+                            blackHoleGfx.beginPath();
+                            blackHoleGfx.arc(0, 0, 30 * scale, startAng, startAng + Math.PI * 0.6);
+                            blackHoleGfx.strokePath();
+                        }
+                    };
+
+                    drawBlackHole(1.0);
+                    blackHoleGfx.setPosition(bhPos.x, bhPos.y);
+
+                    // 觸發顏王 Yeah 處的翠綠黑洞吸入漩渦粒子 (新增中文註解：黑洞產生向心旋轉吸入粒子效果)
                     vortexParticles.setDepth(9996);
                     const emitterVortex = vortexParticles.createEmitter({
-                        x: yeahX,
-                        y: yeahY,
+                        x: bhPos.x,
+                        y: bhPos.y,
                         speed: { min: 100, max: 300 },
                         scale: { start: 3.5, end: 0 },
                         blendMode: 'ADD',
@@ -1855,13 +1895,114 @@ function triggerSuperPlutoExplosion(scene) {
                         vortexAngle += 0.3;
                         const r = 80 * (1 - (vortexAngle / 20));
                         if (r > 0) {
-                            emitterVortex.setPosition(yeahX + Math.cos(vortexAngle) * r, yeahY + Math.sin(vortexAngle) * r);
+                            // 粒子跟隨黑洞中心位置 bhPos
+                            emitterVortex.setPosition(bhPos.x + Math.cos(vortexAngle) * r, bhPos.y + Math.sin(vortexAngle) * r);
                         }
                     }, 16);
 
-                    setTimeout(() => {
-                        vortexParticles.destroy();
-                    }, 1500);
+                    // 2. 漸漸飛到螢幕中間 (新增中文註解：將黑洞平滑移動至螢幕正中心)
+                    scene.tweens.add({
+                        targets: bhPos,
+                        x: width / 2,
+                        y: height / 2,
+                        duration: 1800,
+                        ease: 'Cubic.easeInOut',
+                        onUpdate: () => {
+                            blackHoleGfx.setPosition(bhPos.x, bhPos.y);
+                            drawBlackHole(1.0);
+                        },
+                        onComplete: () => {
+                            // 3. 到達螢幕中間後，開始劇烈顫抖臨界膨脹 (新增中文註解：黑洞到達中心，觸發顫抖膨脹臨界狀態)
+                            scene.tweens.add({
+                                targets: { scale: 1.0 },
+                                scale: 2.8,
+                                duration: 400,
+                                ease: 'Quad.easeIn',
+                                onUpdate: (tween, target) => {
+                                    const shakeX = (Math.random() - 0.5) * 15;
+                                    const shakeY = (Math.random() - 0.5) * 15;
+                                    blackHoleGfx.setPosition(width / 2 + shakeX, height / 2 + shakeY);
+                                    drawBlackHole(target.scale);
+                                },
+                                onComplete: () => {
+                                    // 4. 超級超級超級大爆炸！(新增中文註解：釋放終極華麗的超級超級超級大爆炸)
+                                    // 銷毀黑洞圖形與粒子
+                                    blackHoleGfx.destroy();
+                                    vortexParticles.destroy();
+                                    clearInterval(vortexTimer);
+
+                                    // 鏡頭劇烈震動與極強大閃光 (新增中文註解：終極爆炸震動與三色色溫大閃光)
+                                    scene.cameras.main.shake(2500, 0.08);
+                                    scene.cameras.main.flash(500, 0, 255, 0); // 螢光綠閃光
+                                    
+                                    scene.time.delayedCall(200, () => {
+                                        scene.cameras.main.flash(400, 255, 255, 255); // 白色閃光
+                                    });
+                                    scene.time.delayedCall(500, () => {
+                                        scene.cameras.main.flash(400, 255, 215, 0); // 金黃色閃光
+                                    });
+
+                                    // 生成 3 組有時間差的等離子大震波圈 (新增中文註解：連環擴散 3 組巨型等離子震波圈)
+                                    for (let w = 0; w < 3; w++) {
+                                        scene.time.delayedCall(w * 150, () => {
+                                            const shockwaveGfx = scene.add.graphics();
+                                            shockwaveGfx.setDepth(9999);
+                                            
+                                            // 主題色閃爍
+                                            const waveColors = [0x00ff00, 0xadff2f, 0x00ffff];
+                                            const wColor = waveColors[w];
+                                            
+                                            scene.tweens.add({
+                                                targets: { r: 10, alpha: 1.0 },
+                                                r: 2500,
+                                                alpha: 0,
+                                                duration: 1600,
+                                                ease: 'Cubic.easeOut',
+                                                onUpdate: (tween, target) => {
+                                                    shockwaveGfx.clear();
+                                                    
+                                                    shockwaveGfx.lineStyle(60 * target.alpha, wColor, target.alpha * 0.8);
+                                                    shockwaveGfx.strokeCircle(width / 2, height / 2, target.r);
+                                                    
+                                                    shockwaveGfx.lineStyle(30 * target.alpha, 0xffffff, target.alpha * 0.95);
+                                                    shockwaveGfx.strokeCircle(width / 2, height / 2, target.r - 50);
+                                                },
+                                                onComplete: () => {
+                                                    shockwaveGfx.destroy();
+                                                }
+                                            });
+                                        });
+                                    }
+
+                                    // 爆發 1200 顆超巨型、超高速粒子 (新增中文註解：爆發四色 1200 顆超大超高速核爆粒子)
+                                    const megaParticles = scene.add.particles('plutoParticle');
+                                    megaParticles.setDepth(10000);
+                                    
+                                    const tints = [0x00ff00, 0xadff2f, 0x00ffff, 0xffffff];
+                                    const megaEmitters = tints.map(tint => {
+                                        return megaParticles.createEmitter({
+                                            x: width / 2,
+                                            y: height / 2,
+                                            speed: { min: 250, max: 1700 },
+                                            angle: { min: 0, max: 360 },
+                                            scale: { start: 9.5, end: 0 },
+                                            blendMode: 'ADD',
+                                            lifespan: { min: 1400, max: 2600 },
+                                            quantity: 300,
+                                            frequency: -1,
+                                            tint: tint
+                                        });
+                                    });
+                                    
+                                    megaEmitters.forEach(e => e.explode());
+                                    
+                                    setTimeout(() => {
+                                        megaParticles.destroy();
+                                    }, 2800);
+                                }
+                            });
+                        }
+                    });
 
                     // 撞擊時強烈多重色溫大閃光與激震 (新增中文註解：斜向轟擊造成核爆閃光與激震)
                     scene.cameras.main.flash(450, 0, 255, 0); // 螢光綠閃光
@@ -2033,7 +2174,7 @@ function triggerSuperPlutoExplosion(scene) {
             }
             glitchTicks++;
         }, 80);
-    }, chargeDuration + 1400); // 配合雷射發射後的淡出時機
+    }, chargeDuration + 4350); // 配合黑洞移動與臨界超級大爆炸後的淡出時機
 }
 
 function triggerBossAlignAndExplodeScript(scene) {
