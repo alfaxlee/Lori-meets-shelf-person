@@ -1353,6 +1353,9 @@ function showDeathSelectionScreen(scene) {
 
     // 秘技：冥王炮點擊事件！(進入綠色火焰字幕動畫 + 超華麗綠色爆炸) (新增中文註解：觸發超華麗綠色冥王炮連環特效)
     plutoBtn.onclick = () => {
+        // 將網頁 Body 背景暫時設為黑色，防止 Phaser Canvas 兩側露出白色 (新增中文註解：將 Body 背景暫時變黑防漏白)
+        document.body.style.backgroundColor = 'black';
+
         // 1. 關閉滾動並固定在最上方以進行過場
         selectContainer.style.overflowY = 'hidden';
         selectContainer.scrollTop = 0;
@@ -1574,23 +1577,20 @@ function triggerSuperPlutoExplosion(scene) {
     };
     scene.events.on('update', onCameraTilt);
 
-    // 1. 建立全螢幕白色底色 (層級設為 9980 最底層) (新增中文註解：白色底層)
+    // 1. 建立全螢幕黑色底色以襯托綠色魔法陣，並將邊界四邊各向外加大 500 像素以防搖晃漏白 (層級設為 9980 最底層) (新增中文註解：超大黑色底層)
     const whiteBg = scene.add.graphics();
     whiteBg.setDepth(9980);
-    whiteBg.fillStyle(0xffffff, 1.0);
-    whiteBg.fillRect(0, 0, width, height);
+    whiteBg.fillStyle(0x000000, 1.0);
+    whiteBg.fillRect(-500, -500, width + 1000, height + 1000);
 
-    // 2. 顯示初始地板與平台 (層級設為 9981 高於白色背景) (新增中文註解：還原初始地底平台)
+    // 2. 暫時隱藏地板與平台以製造深空效果 (新增中文註解：隱藏初始地底平台與地板)
     if (ground) {
-        ground.setVisible(true);
-        ground.setDepth(9981);
+        ground.setVisible(false);
     }
     if (platforms) {
-        platforms.setVisible(true);
-        platforms.setDepth(9981);
+        platforms.setVisible(false);
         platforms.getChildren().forEach(child => {
-            child.setVisible(true);
-            child.setDepth(9981);
+            child.setVisible(false);
         });
     }
 
@@ -2181,10 +2181,33 @@ function triggerBossAlignAndExplodeScript(scene) {
     const width = scene.cameras.main.width;
     const height = scene.cameras.main.height;
 
+    // 將網頁 Body 背景還原為白色，與 Phaser 白色底色對齊 (新增中文註解：Body 背景還原為白色)
+    document.body.style.backgroundColor = 'white';
+
     // 先行隱藏所有可能存在的殘留子彈或特效，確保場景乾淨 (新增中文註解：清空所有殘留彈幕)
     if (mgBullets) mgBullets.clear(true, true);
     if (sgBullets) sgBullets.clear(true, true);
     if (snBullets) snBullets.clear(true, true);
+
+    // 重新建立全螢幕白色底色，並向外加大 500 像素以防相機搖晃漏白 (新增中文註解：將背景還原為超大白色背景)
+    const restoreWhiteBg = scene.add.graphics();
+    restoreWhiteBg.setDepth(9980);
+    restoreWhiteBg.fillStyle(0xffffff, 1.0);
+    restoreWhiteBg.fillRect(-500, -500, width + 1000, height + 1000);
+
+    // 還原顯示地底平台與地板 (新增中文註解：還原顯示地板與平台)
+    if (ground) {
+        ground.setVisible(true);
+        ground.setDepth(9981);
+    }
+    if (platforms) {
+        platforms.setVisible(true);
+        platforms.setDepth(9981);
+        platforms.getChildren().forEach(child => {
+            child.setVisible(true);
+            child.setDepth(9981);
+        });
+    }
 
     // 1. 所有 Boss 出場並排成一排 (站在地板上 height - 110)
     // 蘿莉 (紫色), 猥瑣大叔 (黑色/暗灰), 哆啦噩夢 (藍色), 顏王Yeah (黃色)
@@ -2392,7 +2415,7 @@ function showFinalEndingCredits(scene) {
                         color: '#ff0000', // 強烈鮮紅
                         textShadow: '0 0 20px #ff0000, 0 0 45px #ff0000',
                         animation: 'drive-glitch 0.12s infinite alternate',
-                        marginBottom: '30px',
+                        marginBottom: '15px', // 從 30px 縮小至 15px，讓 Alfa-X 往上移 (新增中文註解：縮小邊距使作者署名上移)
                         opacity: '0',
                         transform: 'scale(0.4)',
                         transition: 'all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
@@ -2433,8 +2456,270 @@ function showFinalEndingCredits(scene) {
                         letterSpacing: '2px'
                     });
 
+                    // 提示文字 (新增中文註解：密碼提示文字)
+                    const hintDiv = document.createElement('div');
+                    hintDiv.innerText = "提示：Driver團團長的絕招是什麼？";
+                    Object.assign(hintDiv.style, {
+                        fontSize: '20px',
+                        color: '#888888',
+                        marginTop: '15px',
+                        marginBottom: '10px',
+                        opacity: '0',
+                        transition: 'opacity 0.8s ease',
+                        fontStyle: 'italic',
+                        fontFamily: "'Microsoft JhengHei', sans-serif"
+                    });
+
+                    // 建立密碼輸入框容器 (新增中文註解：建立輸入框與按鈕容器)
+                    const inputContainer = document.createElement('div');
+                    Object.assign(inputContainer.style, {
+                        display: 'flex',
+                        gap: '15px',
+                        alignItems: 'center',
+                        marginTop: '40px',
+                        opacity: '0',
+                        transition: 'opacity 1.0s ease, transform 0.2s ease-out'
+                    });
+
+                    // 密碼輸入文字框 (新增中文註解：建立密碼輸入文字框元件)
+                    const passwordInput = document.createElement('input');
+                    passwordInput.type = 'text';
+                    passwordInput.placeholder = '請輸入密碼...';
+                    Object.assign(passwordInput.style, {
+                        padding: '12px 20px',
+                        fontSize: '18px',
+                        borderRadius: '8px',
+                        border: '2px solid #ffd700',
+                        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                        color: '#ffd700',
+                        outline: 'none',
+                        boxShadow: '0 0 10px rgba(255, 215, 0, 0.2)',
+                        fontFamily: "'Microsoft JhengHei', sans-serif"
+                    });
+
+                    // 確認按鈕 (新增中文註解：建立確認按鈕)
+                    const confirmBtn = document.createElement('button');
+                    confirmBtn.innerText = '確認';
+                    Object.assign(confirmBtn.style, {
+                        padding: '12px 24px',
+                        fontSize: '18px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        backgroundColor: '#ffd700',
+                        color: '#000000',
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                        boxShadow: '0 0 15px rgba(255, 215, 0, 0.4)',
+                        fontFamily: "'Microsoft JhengHei', sans-serif",
+                        transition: 'background-color 0.2s, box-shadow 0.2s'
+                    });
+
+                    // 滑鼠移入按鈕懸停動畫 (新增中文註解：按鈕懸停與離開時的樣式切換)
+                    confirmBtn.onmouseover = () => {
+                        confirmBtn.style.backgroundColor = '#ffea70';
+                        confirmBtn.style.boxShadow = '0 0 25px rgba(255, 215, 0, 0.7)';
+                    };
+                    confirmBtn.onmouseout = () => {
+                        confirmBtn.style.backgroundColor = '#ffd700';
+                        confirmBtn.style.boxShadow = '0 0 15px rgba(255, 215, 0, 0.4)';
+                    };
+
+                    // 確認按鈕點擊事件 (新增中文註解：點擊確認按鈕進行密碼驗證與頁面跳轉)
+                    confirmBtn.onclick = () => {
+                        if (passwordInput.value.trim() === '自爆') {
+                            // 密碼正確，淡出結語頁面所有內容 (新增中文註解：密碼正確，淡出結局畫面並過渡)
+                            endContainer.style.transition = 'opacity 1.5s ease';
+                            endContainer.style.opacity = '0';
+                            
+                            setTimeout(() => {
+                                // 移除結語 container
+                                endContainer.remove();
+                                
+                                // 建立一個全新的黑色頁面 (新增中文註解：建立全新純黑頁面)
+                                const blackPage = document.createElement('div');
+                                Object.assign(blackPage.style, {
+                                    position: 'fixed',
+                                    top: '0',
+                                    left: '0',
+                                    width: '100vw',
+                                    height: '100vh',
+                                    backgroundColor: '#000000',
+                                    zIndex: '10007',
+                                    display: 'flex',
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                    color: '#ffffff',
+                                    fontFamily: "'Microsoft JhengHei', sans-serif",
+                                    fontSize: '24px'
+                                });
+                                document.body.appendChild(blackPage);
+                                
+                                // 建立內容容器 (新增中文註解：建立新頁面文字與按鈕的 Flex 容器)
+                                const contentWrapper = document.createElement('div');
+                                Object.assign(contentWrapper.style, {
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '30px',
+                                    textAlign: 'center',
+                                    maxWidth: '850px',
+                                    padding: '20px',
+                                    opacity: '0',
+                                    transition: 'opacity 1.0s ease'
+                                });
+                                blackPage.appendChild(contentWrapper);
+
+                                // 標題文字 (新增中文註解：結局恭喜與引導文字)
+                                const mainTitle = document.createElement('div');
+                                mainTitle.innerText = "恭喜你破到這個結局，有一個問題要問你，請先回答在看問題";
+                                Object.assign(mainTitle.style, {
+                                    fontSize: '26px',
+                                    color: '#00ff00',
+                                    fontWeight: 'bold',
+                                    textShadow: '0 0 10px rgba(0, 255, 0, 0.4)',
+                                    lineHeight: '1.6'
+                                });
+                                contentWrapper.appendChild(mainTitle);
+
+                                // 按鈕容器 (新增中文註解：按鈕 Flex 容器)
+                                const btnContainer = document.createElement('div');
+                                Object.assign(btnContainer.style, {
+                                    display: 'flex',
+                                    gap: '40px',
+                                    marginTop: '20px'
+                                });
+                                contentWrapper.appendChild(btnContainer);
+
+                                // "是" 按鈕 (新增中文註解：是按鈕)
+                                const yesBtn = document.createElement('button');
+                                yesBtn.innerText = "是";
+                                Object.assign(yesBtn.style, {
+                                    padding: '15px 40px',
+                                    fontSize: '22px',
+                                    borderRadius: '10px',
+                                    border: '2px solid #00ff00',
+                                    backgroundColor: 'rgba(0, 255, 0, 0.1)',
+                                    color: '#00ff00',
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer',
+                                    boxShadow: '0 0 15px rgba(0, 255, 0, 0.2)',
+                                    fontFamily: "'Microsoft JhengHei', sans-serif",
+                                    transition: 'all 0.2s'
+                                });
+
+                                // "沒有" 按鈕 (新增中文註解：沒有按鈕)
+                                const noBtn = document.createElement('button');
+                                noBtn.innerText = "沒有";
+                                Object.assign(noBtn.style, {
+                                    padding: '15px 40px',
+                                    fontSize: '22px',
+                                    borderRadius: '10px',
+                                    border: '2px solid #ff3333',
+                                    backgroundColor: 'rgba(255, 51, 51, 0.1)',
+                                    color: '#ff3333',
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer',
+                                    boxShadow: '0 0 15px rgba(255, 51, 51, 0.2)',
+                                    fontFamily: "'Microsoft JhengHei', sans-serif",
+                                    transition: 'all 0.2s'
+                                });
+
+                                // 按鈕懸停效果 (新增中文註解：為兩個按鈕綁定 Hover 動態發光與配色特效)
+                                yesBtn.onmouseover = () => {
+                                    yesBtn.style.backgroundColor = '#00ff00';
+                                    yesBtn.style.color = '#000000';
+                                    yesBtn.style.boxShadow = '0 0 25px rgba(0, 255, 0, 0.6)';
+                                };
+                                yesBtn.onmouseout = () => {
+                                    yesBtn.style.backgroundColor = 'rgba(0, 255, 0, 0.1)';
+                                    yesBtn.style.color = '#00ff00';
+                                    yesBtn.style.boxShadow = '0 0 15px rgba(0, 255, 0, 0.2)';
+                                };
+
+                                noBtn.onmouseover = () => {
+                                    noBtn.style.backgroundColor = '#ff3333';
+                                    noBtn.style.color = '#000000';
+                                    noBtn.style.boxShadow = '0 0 25px rgba(255, 51, 51, 0.6)';
+                                };
+                                noBtn.onmouseout = () => {
+                                    noBtn.style.backgroundColor = 'rgba(255, 51, 51, 0.1)';
+                                    noBtn.style.color = '#ff3333';
+                                    noBtn.style.boxShadow = '0 0 15px rgba(255, 51, 51, 0.2)';
+                                };
+
+                                btnContainer.appendChild(yesBtn);
+                                btnContainer.appendChild(noBtn);
+
+                                // 漸顯第一階段內容 (新增中文註解：漸顯淡入第一階段問題內容)
+                                setTimeout(() => {
+                                    contentWrapper.style.opacity = '1';
+                                }, 100);
+
+                                // 切換到第二階段問題的輔助函式 (新增中文註解：點擊按鈕後淡出當前內容並顯示新問題)
+                                const showNextQuestion = (questionText, textColor) => {
+                                    contentWrapper.style.opacity = '0';
+                                    setTimeout(() => {
+                                        // 清空容器以重新寫入新問題
+                                        contentWrapper.innerHTML = '';
+                                        
+                                        // 建立終極問題元件 (新增中文註解：建立終極問題元件)
+                                        const finalQuestion = document.createElement('div');
+                                        finalQuestion.innerText = questionText;
+                                        Object.assign(finalQuestion.style, {
+                                            fontSize: '56px',
+                                            color: textColor,
+                                            fontWeight: 'bold',
+                                            textShadow: `0 0 30px ${textColor}`,
+                                            lineHeight: '1.4',
+                                            animation: 'drive-glitch 0.15s infinite alternate' // 沿用震動動畫
+                                        });
+                                        contentWrapper.appendChild(finalQuestion);
+
+                                        // 淡入新問題 (新增中文註解：淡入終極問題)
+                                        contentWrapper.style.opacity = '1';
+                                    }, 1000);
+                                };
+
+                                // 綁定點擊事件 (新增中文註解：為是與沒有按鈕綁定跳轉終極問題的點擊事件)
+                                yesBtn.onclick = () => {
+                                    showNextQuestion("你是甲嗎？", "#00ffff"); // 亮青色
+                                };
+
+                                noBtn.onclick = () => {
+                                    showNextQuestion("你有雞柳條嗎？", "#ff00ff"); // 桃紅色
+                                };
+                            }, 1500);
+                        } else {
+                            // 密碼錯誤，輸入框紅框閃爍 (新增中文註解：密碼錯誤時的震動與變紅提示)
+                            passwordInput.style.borderColor = '#ff0000';
+                            passwordInput.style.boxShadow = '0 0 15px rgba(255, 0, 0, 0.6)';
+                            passwordInput.placeholder = '密碼錯誤！請重新輸入';
+                            passwordInput.value = '';
+                            
+                            // 抖動輸入容器 (新增中文註解：觸發容器位移抖動動畫)
+                            inputContainer.style.transform = 'translateX(10px)';
+                            setTimeout(() => { inputContainer.style.transform = 'translateX(-10px)'; }, 50);
+                            setTimeout(() => { inputContainer.style.transform = 'translateX(5px)'; }, 100);
+                            setTimeout(() => { inputContainer.style.transform = 'translateX(-5px)'; }, 150);
+                            setTimeout(() => { inputContainer.style.transform = 'translateX(0)'; }, 200);
+
+                            // 還原輸入框樣式 (新增中文註解：1.5秒後重設為黃金框樣式)
+                            setTimeout(() => {
+                                passwordInput.style.borderColor = '#ffd700';
+                                passwordInput.style.boxShadow = '0 0 10px rgba(255, 215, 0, 0.2)';
+                                passwordInput.placeholder = '請輸入密碼...';
+                            }, 1500);
+                        }
+                    };
+
+                    inputContainer.appendChild(passwordInput);
+                    inputContainer.appendChild(confirmBtn);
+
                     endContainer.appendChild(driveDiv);
                     endContainer.appendChild(authorDiv);
+                    endContainer.appendChild(hintDiv); // 加入提示文字 (新增中文註解：將提示文字附加至結局容器)
+                    endContainer.appendChild(inputContainer);
 
                     // 啟用漸顯與縮放，並引發相機大震動
                     setTimeout(() => {
@@ -2443,9 +2728,13 @@ function showFinalEndingCredits(scene) {
                         scene.cameras.main.shake(450, 0.035);
                     }, 50);
 
-                    // 稍微延後漸顯作者署名
+                    // 稍微延後漸顯作者署名與提示文字，隨後淡入密碼輸入區 (新增中文註解：依序淡入署名、提示與輸入框)
                     setTimeout(() => {
                         authorDiv.style.opacity = '1';
+                        hintDiv.style.opacity = '1'; // 提示文字與署名同步淡入 (新增中文註解：提示字體與署名同步淡入)
+                        setTimeout(() => {
+                            inputContainer.style.opacity = '1';
+                        }, 800);
                     }, 500);
 
                 }, 1000);

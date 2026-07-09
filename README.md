@@ -1,6 +1,16 @@
 <!-- 使用具備黃金發光特效與自適應 1/3 螢幕寬度（5.4vw ~ 6.6vw）的居中大標題 HTML (修改) -->
 <h1 align="center" style="font-size: 6.6vw; text-align: center; background: linear-gradient(to right, #ffffff, #d4af37); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 0 15px rgba(212, 175, 55, 0.5); border-bottom: 2px solid #d4af37; display: table; margin: 0 auto; padding: 15px 0;">蘿莉遇櫃人</h1>
 
+<!-- 新增中文註解：在大標題下方、簡介上方插入隱藏彩蛋內容 -->
+## 隱藏內容 (Hidden Easter Egg)
+
+Tphitg Tvv: Lwtc ndj sxt, hrgdaa sdlc iwt htatrixdc hrgttc id uxcs p wxsstc qjiidc id apjcrw iwt Eajid Rpccdc. Iwxh igxvvtgh p rxctbpixr tktci lwtgt iwt qdhh Ntpw xh hlpaadlts qn p qaprz wdat pcs dqaxitgpits xc p bphhxkt tmeadhxdc. Puitg iwt hnhitb vaxirwth, paa udjg qdhhth axct je pcs qadl iwtbhtakth je. Dcrt iwt rgtsxih peetpg, tcitg iwt htrgti ephhldgs '自爆' id tcitg p spgz fjthixdccpxgt. Pchltgxcv 'Nth' atpsh id 'Pgt ndj vpn?', lwxat pchltgxcv 'Cd' atpsh id 'Sd ndj wpkt rwxrztc itcstgh?'.
+
+<!-- 新增中文註解：在密文下方加入解密提示文字 -->
+Caesar Cipher, move with the number now that all kids are saying😏😏
+
+---
+
 > 一款以 **Phaser 3** 製作的 2D 橫向 Boss Rush 射擊遊戲。
 > 玩家需要使用三種武器打倒「蘿莉」或「猥瑣大叔」Boss，並躲避越來越兇猛的攻擊。
 
@@ -185,6 +195,98 @@ HP 降至 200 以下時觸發過載模式，大叔進入強化型態。
 | 移動方式 | 地面追蹤 | 空中漂浮跟隨 |
 
 ---
+
+<!-- 新增中文註解：在 README.md 中新增第三階段：哆啦噩夢 Boss 說明 -->
+### 第三階段：哆啦噩夢 Boss（HP: 400）
+
+哆啦噩夢體型普通，具備獨特的領域展開能力，善於逃跑並使用遠程大威力武器壓制玩家。
+
+#### 一般模式
+
+- **移動 AI**
+  - 主動逃離玩家（若玩家在左則往右移動，反之亦然）
+  - 若高低落差合適，在落地時會高跳（跳躍力 -825）以躲避玩家
+
+- **攻擊招式**（每 2 秒隨機從攻擊池選擇一種，在一般領域下）：
+  - **狙擊攻擊 (60%)**：主動瞄準玩家並顯示紅色虛線彈道預警，短暫延遲後發射高速狙擊雷射。
+  - **火箭筒攻擊 (20%)**：朝玩家發射大範圍的高速火箭彈。
+  - **瞬移太陽球 (20%)**：向玩家投擲一顆藍色傳送引導球，引導成功後瞬移到該處。
+
+- **領域展開 (Domain Expansion)**：
+  - **觸發條件**：Boss 登場或重生 0.5 秒後自動釋放。
+  - **視覺效果**：Boss 位置發射擴散藍色圓圈，隨後全螢幕渲染成 20% 透明度的藍色覆蓋層。
+  - **影響效果**：場景重力與玩家、子彈的速度減半（包括已射出的彈幕），使彈道變為慢速漂浮。
+
+#### 真領域展開 (HP ≤ 125) — True Domain Expansion
+
+當血量降至 125 以下時觸發真領域展開，進入究極對決型態。
+
+- **過場動畫**
+  - 暫停全場所有攻擊與玩家移動，Boss 處於無敵狀態。
+  - 播放原領域崩壞破碎的故障特效，隨後覆蓋深藍/紫色漸變層與新背景。
+- **真領域效果**
+  - 恢復遊戲後，Boss 取消「傳送球」攻擊，改為 **75% 狙擊、25% 火箭筒**。
+  - 召喚 **2 個鏡像分身**（分身帶有獨立血量 UI 條），與本體一同進行逃跑並使用狙擊/火箭筒瘋狂壓制玩家。
+  - 當分身血量歸零時，播放消散特效並消失。
+
+#### HP 閾值事件
+
+| HP | 事件 |
+|----|------|
+| 400 → 125 | 一般模式 + 自動維持「領域展開」 |
+| ≤ 125 | 觸發「真領域展開」過場，召喚 2 個分身加入戰鬥 |
+| ≤ 0 | Boss 死亡 → 3 秒後重生 |
+
+#### 受擊機制
+
+| 項目 | 說明 |
+|------|------|
+| 受擊效果 | 閃紅、輕微後退、相機抖動 |
+| 無敵狀態 | 在「真領域展開」過場動畫期間為完全無敵 |
+
+---
+
+<!-- 新增中文註解：在 README.md 中新增第四階段：顏王 Yeah Boss 說明 -->
+### 第四階段：顏王 Yeah Boss（HP: 1000）
+
+顏王 Yeah 擁有極高的血量與獨特的神聖魔法能量機制，不具備常規招式，但玩家必須透過收集能量球來應對其必殺絕招。
+
+#### 運作機制
+
+- **移動 AI**
+  - 落地時會主動計算玩家方向，往玩家方向進行連續高跳追逐（跳躍力 -583）。
+  - 水平移動受限：只能在跳躍於空中的時候進行水平移動，在地上時水平速度為 0，落地後隨即再次起跳，形成連續蹦跳的鬼畜移動。
+
+- **能量球生成**
+  - 登場後，Boss 每 0.5 秒會在畫面隨機位置定點生成 3 顆黃色能量球（最多同時存在 8 顆）。
+  - 能量球半徑 12px，具有白色邊框與呼吸微縮放動畫。
+
+- **神盛魔法能量 (holyEnergy)**
+  - 玩家必須主動移動去「重疊碰撞」黃色能量球以收集它們，每收集一顆會引發畫面金黃色閃爍。
+  - 總共需要收集 **8 顆** 才能填滿 100% 能量條。
+
+- **神聖魔法必殺動畫 (Holy Cinematic)**
+  - **觸發條件**：玩家收集滿 8 顆能量球（能量條 100%）。
+  - **必殺過程**：
+    1. **凍結世界**：世界靜止，玩家與 Boss 凍結移動，玩家進入無敵狀態，清空場上剩餘的球。
+    2. **祈禱文字**：畫面淡入為全黑，並在正中央以極大金黃色字體逐行顯示五句祈禱文（最後一行為特大金色光暈字「顏值崩壞」並特寫放大 1.5 倍）。
+    3. **神聖光束**：黑幕與文字淡出，天降金色巨型魔法陣光束持續轟擊 4 秒，隨後直接強制觸發玩家當機（BSOD 藍屏畫面）。
+
+#### HP 閾值事件
+
+| HP | 事件 |
+|----|------|
+| 1000 | 初始狀態，開始定時生成能量球 |
+| ≤ 0 | Boss 死亡 → 3 秒後重生 |
+
+#### 受擊機制
+
+| 項目 | 說明 |
+|------|------|
+| 受擊效果 | 受到傷害時會閃紅、輕微後退、相機抖動 |
+
+---
+
 
 ## 武器系統
 
@@ -463,3 +565,7 @@ initUncleStateRefs({ uncle, uncleHPText, onUncleDeath, player });
 | `attackQueue` | 攻擊佇列陣列，儲存待執行的攻擊類型 |
 | `hammer` | 當前大槌 Graphics 物件參考 |
 | `spikes` | 當前所有地刺物件陣列 |
+
+
+
+
