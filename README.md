@@ -4,15 +4,15 @@
 <!-- 新增中文註解：在大標題下方、簡介上方插入隱藏彩蛋內容 -->
 ## 隱藏內容 (Hidden Easter Egg)
 
-Tphitg Tvv: Lwtc ndj sxt, hrgdaa sdlc iwt htatrixdc hrgttc id uxcs p wxsstc qjiidc id apjcrw iwt Eajid Rpccdc. Iwxh igxvvtgh p rxctbpixr tktci lwtgt iwt qdhh Ntpw xh hlpaadlts qn p qaprz wdat pcs dqaxitgpits xc p bphhxkt tmeadhxdc. Puitg iwt hnhitb vaxirwth, paa udjg qdhhth axct je pcs qadl iwtbhtakth je. Dcrt iwt rgtsxih peetpg, tcitg iwt htrgti ephhldgs '自爆' id tcitg p spgz fjthixdccpxgt. Pchltgxcv 'Nth' atpsh id 'Pgt ndj vpn?', lwxat pchltgxcv 'Cd' atpsh id 'Sd ndj wpkt rwxrztc itcstgh?'.
-
+ Tphitg Tvv: Lwtc ndj sxt id sgphixr sgde xc ewnhxrpa piigprixktcthh, hrgdaa sdlc iwt htatrixdc hrgttc id uxcs p wxsstc qjiidc id apjcrw iwt Eajid Rpccdc. Iwxh igxvvtgh p rxctbpixr tktci lwtgt iwt qdhh Ntpw xh hlpaadlts qn p qaprz wdat pcs dqaxitgpits xc p bphhxkt tmeadhxdc. Puitg iwt hnhitb vaxirwth, paa udjg qdhhth axct je pcs qadl iwtbhtakth je. Dcrt iwt rgtsxih peetpg, tcitg iwt htrgti ephhldgs '自爆' id tcitg p spgz fjthixdccpxgt. Pchltgxcv 'Nth' atpsh id 'Pgt ndj vpn?', lwxat pchltgxcv 'Cd' atpsh id 'Sd ndj wpkt rwxrztc itcstgh?'.
 <!-- 新增中文註解：在密文下方加入解密提示文字 -->
 Caesar Cipher, move with the number now that all kids are saying😏😏
 
 ---
 
 > 一款以 **Phaser 3** 製作的 2D 橫向 Boss Rush 射擊遊戲。
-> 玩家需要使用三種武器打倒「蘿莉」或「猥瑣大叔」Boss，並躲避越來越兇猛的攻擊。
+<!-- 新增中文註解：更新遊戲簡介，加入四個 Boss 的說明 -->
+> 玩家需要使用三種武器打倒「蘿莉」、「猥瑣大叔」、「哆啦噩夢」或「顏王Yeah」Boss，並躲避越來越兇猛的攻擊。
 
 ---
 
@@ -270,8 +270,9 @@ HP 降至 200 以下時觸發過載模式，大叔進入強化型態。
   - **必殺過程**：
     1. **凍結世界**：世界靜止，玩家與 Boss 凍結移動，玩家進入無敵狀態，清空場上剩餘的球。
     2. **祈禱文字**：畫面淡入為全黑，並在正中央以極大金黃色字體逐行顯示五句祈禱文（最後一行為特大金色光暈字「顏值崩壞」並特寫放大 1.5 倍）。
-    3. **神聖光束**：黑幕與文字淡出，天降金色巨型魔法陣光束持續轟擊 4 秒，隨後直接強制觸發玩家當機（BSOD 藍屏畫面）。
+    3. **神聖光束**：黑幕與文字淡出，天降金色巨型魔法陣光束持續轟擊 4 秒，隨後彈出選擇畫面，提供「當機」與「死亡」兩個按鈕給玩家。<!-- 新增中文註解：更正為彈出死亡與當機選擇畫面 -->
 
+<!-- 新增中文註解：已移除顏王隱藏彩蛋明文，保持其僅以密文形式出現在 README 頂端 -->
 #### HP 閾值事件
 
 | HP | 事件 |
@@ -360,7 +361,11 @@ curseforge/
 │   ├── LoliStateMachine.js # 蘿莉 Boss AI 狀態機（HP、狀態切換、傷害處理）
 │   ├── LoliAttacks.js      # 蘿莉 Boss 攻擊實作（衝擊波、雷射、彈跳球、跳躍攻擊）
 │   ├── UncleStateMachine.js# 猥瑣大叔狀態機（HP、一般/過載模式切換、AI 移動）
-│   └── UncleAttacks.js     # 猥瑣大叔攻擊系統（大槌、地刺、黑球衝刺、超級地刺、超級刺球）
+│   ├── UncleAttacks.js     # 猥瑣大叔攻擊系統（大槌、地刺、黑球衝刺、超級地刺、超級刺球）
+│   ├── DoraStateMachine.js  # 哆啦噩夢狀態機（HP、領域展開、真領域展開過場、分身召喚） (新增中文註解：加入哆啦狀態機)
+│   ├── DoraAttacks.js       # 哆啦噩夢攻擊實作（狙擊雷射、火箭筒、瞬移太陽球） (新增中文註解：加入哆啦攻擊)
+│   ├── YeahStateMachine.js  # 顏王Yeah狀態機（HP、連續跳躍AI、黃色能量球生成與收集） (新增中文註解：加入顏王狀態機)
+│   └── YeahAttacks.js       # 顏王Yeah攻擊實作（結構佔位符） (新增中文註解：加入顏王攻擊)
 ├── weapons/
 │   └── WeaponManager.js    # 三把武器的彈藥、射擊、換彈邏輯
 └── ui/
@@ -419,6 +424,21 @@ curseforge/
 - 猥瑣大叔 Boss 的所有攻擊實作
 - **一般模式攻擊**：大槌攻擊、召喚地刺、黑球衝刺
 - **過載模式攻擊**：超級地刺、超級刺球、三角形導彈（自帶 2px 白色描邊，在暗色背景下更容易被玩家看清）
+
+<!-- 新增中文註解：在模組說明中新增哆啦噩夢與顏王Yeah的檔案說明 -->
+### `boss/DoraStateMachine.js`
+- 控制哆啦噩夢「避開玩家逃跑」的移動 AI 與跳躍避險邏輯。
+- 負責領域展開（全螢幕藍色減速渲染）與真領域展開（HP ≤ 125 時召喚 2 個帶血條分身一同戰鬥）。
+
+### `boss/DoraAttacks.js`
+- 哆啦噩夢的所有招式實作（狙擊雷射、火箭筒、瞬移太陽球）與每 2 秒發動一次的攻擊排程器。
+
+### `boss/YeahStateMachine.js`
+- 負責顏王Yeah 的血量、受傷/死亡、以及「空中才能水平移動」的蹦跳追捕 AI。
+- 負責每 0.5 秒隨機在畫面上定點生成 3 顆黃色能量球。
+
+### `boss/YeahAttacks.js`
+- 顏王Yeah 攻擊模組的結構佔位符。
 
 ### `weapons/WeaponManager.js`
 - 維護三把武器的彈藥量、射速、換彈時間
