@@ -14,6 +14,8 @@ export class MainMenuScene extends Phaser.Scene {
         this.load.image('doraSelect', './assets/images/哆啦噩夢.png');
         // 預載顏王Yeah 的選擇圖片 (使用本地下載的圖片以避開 CORS)
         this.load.image('yeahSelect', './assets/images/Yeah.jpg');
+        // 預載請屎皇的選擇圖片 (新增中文註解：載入新 Boss 請屎皇的圖片)
+        this.load.image('poopKingSelect', './assets/images/請屎皇.jpg');
     }
 
     create() {
@@ -233,24 +235,29 @@ export class BossSelectScene extends Phaser.Scene {
             }
         }).setOrigin(0.5);
 
-        // 建立「蘿莉」Boss 選卡 (修改為五等分水平排列，以容納四位 Boss)
-        this.createBossCard(width / 5, height / 2, 'loliSelect', '蘿莉', () => {
+        // 建立「蘿莉」Boss 選卡 (修改為六等分水平排列，以容納五位 Boss，新增中文註解：將選卡排列改為 6 等分以加入請屎皇)
+        this.createBossCard(width / 6, height / 2, 'loliSelect', '蘿莉', () => {
             this.scene.start('GameScene', { selectedBoss: 'loli' });
         });
 
         // 建立「猥瑣大叔」Boss 選卡
-        this.createBossCard(2 * width / 5, height / 2, 'uncleSelect', '猥瑣大叔', () => {
+        this.createBossCard(2 * width / 6, height / 2, 'uncleSelect', '猥瑣大叔', () => {
             this.scene.start('GameScene', { selectedBoss: 'uncle' });
         });
 
         // 建立「哆啦噩夢」Boss 選卡
-        this.createBossCard(3 * width / 5, height / 2, 'doraSelect', '哆啦噩夢', () => {
+        this.createBossCard(3 * width / 6, height / 2, 'doraSelect', '哆啦噩夢', () => {
             this.scene.start('GameScene', { selectedBoss: 'dora' });
         });
 
         // 建立「顏王Yeah」Boss 選卡
-        this.createBossCard(4 * width / 5, height / 2, 'yeahSelect', '顏王Yeah', () => {
+        this.createBossCard(4 * width / 6, height / 2, 'yeahSelect', '顏王Yeah', () => {
             this.scene.start('GameScene', { selectedBoss: 'yeah' });
+        });
+
+        // 建立「請屎皇」Boss 選卡
+        this.createBossCard(5 * width / 6, height / 2, 'poopKingSelect', '請屎皇', () => {
+            this.scene.start('GameScene', { selectedBoss: 'poopKing' });
         });
 
         // 返回主選單按鈕 (改為金色矮型按鈕)

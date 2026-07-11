@@ -11,7 +11,9 @@ export const playerState = {
     energyRegen: 0.5,
     isDashing: false,
     isInvincible: false, // 衝刺無敵狀態
-    dashEnergyColor: 0x00ffff // 衝刺能量條顏色
+    dashEnergyColor: 0x00ffff, // 衝刺能量條顏色
+    cannotMove: false, // 限制玩家移動狀態 (新增中文註解：定義玩家是否被定身)
+    isDashIndicatorLit: false // 衝刺時機指示器是否亮起 (新增中文註解)
 };
 
 /**
@@ -26,6 +28,22 @@ export function updatePlayer(scene, player, boss, createDashShieldFn) {
 
     if (s.dashEnergy < s.maxDashEnergy) {
         s.dashEnergy = Math.min(s.maxDashEnergy, s.dashEnergy + s.energyRegen);
+    }
+
+    // 檢查是否處於靜止狀態，且在 combo 之外 (定身狀態為 combo 期間，故須排他) (新增中文註解：靜止 0.5 秒回滿能量條邏輯)
+    const isStill = Math.abs(player.body.velocity.x) < 0.1 && 
+                    Math.abs(player.body.velocity.y) < 0.1 && 
+                    !s.isDashing && 
+                    !s.cannotMove;
+
+    if (isStill) {
+        if (!s.stillStartTime) {
+            s.stillStartTime = scene.time.now;
+        } else if (scene.time.now - s.stillStartTime >= 500) {
+            s.dashEnergy = s.maxDashEnergy; // 立即回滿能量
+        }
+    } else {
+        s.stillStartTime = null; // 移開或移動時重置計時器
     }
 
     const dashPressed = Phaser.Input.Keyboard.JustDown(scene.keys.dash) || mobileInput.dash;
@@ -53,6 +71,11 @@ export function updatePlayer(scene, player, boss, createDashShieldFn) {
                 if (scene.isDoraDomainActive) {
                     speed *= 0.5;
                 }
+            } // 補回被誤刪的 else 區間結尾括號 (修改)
+            
+            // 如果處於定身/Combo 期間，衝刺速度設為 0 以防移動位置 (修改)
+            if (s.cannotMove) {
+                speed = 0;
             }
             
             player.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
@@ -95,14 +118,18 @@ export function updatePlayer(scene, player, boss, createDashShieldFn) {
     }
 
     if (!s.isDashing) {
-        // 如果哆啦噩夢的領域展開啟動，移動速度減慢
-        const currentMoveSpeed = scene.isDoraDomainActive ? 200 : 400;
-        const currentJumpSpeed = scene.isDoraDomainActive ? -275 : -550;
+        if (s.cannotMove) {
+            player.setVelocityX(0); // 限制移動速度為 0 (新增中文註解：玩家被請屎皇定身無法左右與跳躍)
+        } else {
+            // 如果哆啦噩夢的領域展開啟動，移動速度減慢
+            const currentMoveSpeed = scene.isDoraDomainActive ? 200 : 400;
+            const currentJumpSpeed = scene.isDoraDomainActive ? -275 : -550;
 
-        if (scene.keys.left.isDown || mobileInput.left) player.setVelocityX(-currentMoveSpeed);
-        else if (scene.keys.right.isDown || mobileInput.right) player.setVelocityX(currentMoveSpeed);
-        else player.setVelocityX(0);
+            if (scene.keys.left.isDown || mobileInput.left) player.setVelocityX(-currentMoveSpeed);
+            else if (scene.keys.right.isDown || mobileInput.right) player.setVelocityX(currentMoveSpeed);
+            else player.setVelocityX(0);
 
-        if ((scene.keys.up.isDown || mobileInput.up) && player.body.touching.down) player.setVelocityY(currentJumpSpeed);
+            if ((scene.keys.up.isDown || mobileInput.up) && player.body.touching.down) player.setVelocityY(currentJumpSpeed);
+        }
     }
 }
