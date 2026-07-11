@@ -42,6 +42,14 @@
             -webkit-text-fill-color: transparent !important;
             text-shadow: 0 0 15px rgba(212, 175, 55, 0.4);
         }
+        
+        /* ===== 二級標題藍色特效 ===== */
+        /* 新增中文註解：將 H2 標題套用與目錄連結相同的亮藍色效果，使視覺風格呼應 */
+        .markdown-body h2 {
+            color: #58a6ff !important;
+            border-bottom: 1px solid rgba(88, 166, 255, 0.3) !important;
+            text-shadow: 0 0 10px rgba(88, 166, 255, 0.15);
+        }
 
         /* ===== 重要澄清彈窗遮罩 ===== */
         #overlay {
@@ -162,32 +170,27 @@
     <script>
         // ===== 1. 載入並渲染 README.md =====
         if (typeof marked !== 'undefined') {
-            // 自訂 heading renderer，產生正確的中文錨點 ID（與目錄連結吻合）
-            const renderer = {
-                heading(arg1, arg2, arg3) {
-                    let text, level, raw;
-                    // 相容 marked.js 新舊版本
-                    if (arg1 && typeof arg1 === 'object') {
-                        text = arg1.text; level = arg1.level; raw = arg1.raw;
-                    } else {
-                        text = arg1; level = arg2; raw = arg3;
-                    }
-                    const src = (raw || text || '').toString();
-                    // 產生與 GitHub 一致的 slug：小寫、空格轉 -、移除括號與標點
-                    const id = src.toLowerCase().trim()
-                        .replace(/\s+/g, '-')
-                        .replace(/[()（）「」\[\]{}?!.,;:：，。；+=%$#@`~*]/g, '')
-                        .replace(/[^\w\u4e00-\u9fa5-]/g, '');
-                    return '<h' + level + ' id="' + id + '">' + text + '</h' + level + '>';
-                }
-            };
-            marked.use({ renderer: renderer });
 
-            // 讀取 README.md（附帶時間戳防快取）
+            // 讀取 README.md（附帶時間戳防快取） (新增中文註解：非同步載入 README 檔案)
             fetch('./README.md?t=' + Date.now())
                 .then(function(r) { return r.ok ? r.text() : Promise.reject('找不到 README.md'); })
                 .then(function(md) {
-                    document.getElementById('content').innerHTML = marked.parse(md);
+                    // 新增中文註解：雙重保險後處理，強行覆蓋分配與 GitHub 吻合的 slug ID，防範 marked 預設生成無效 ID
+                    var htmlContent = marked.parse(md);
+                    console.log('[Readme.html Debug] Marked parsed HTML length:', htmlContent.length);
+                    document.getElementById('content').innerHTML = htmlContent;
+                    console.log('[Readme.html Debug] Content innerHTML sample:', htmlContent.substring(0, 1500));
+
+                    var headings = document.getElementById('content').querySelectorAll('h1, h2, h3, h4, h5, h6');
+                    headings.forEach(function(h) {
+                        var text = h.textContent || '';
+                        var id = text.toLowerCase().trim()
+                            .replace(/\s+/g, '-')
+                            .replace(/[()（）「」\[\]{}?!.,;:：，。；+=%$#@`~*]/g, '')
+                            .replace(/[^\w\u4e00-\u9fa5-]/g, '');
+                        h.id = id;
+                        console.log('[Readme.html Debug] Set heading ID:', h.tagName, 'text:', text, '=> ID:', id);
+                    });
                 })
                 .catch(function(e) {
                     document.getElementById('content').innerHTML = '<h1>載入失敗</h1><p>' + e + '</p>';
@@ -217,12 +220,51 @@
         }, 1000);
 
         // 按鈕點擊：移除遮罩、顯示內容
+        // 按鈕點擊：移除遮罩、顯示內容
         btn.addEventListener('click', function() {
             if (btn.disabled) return;
+            
+            // 新增中文註解：暫時移除 hash 以免 display: block 時觸發瀏覽器預設的錨點跳轉滾動
+            var hash = window.location.hash;
+            if (hash) {
+                history.replaceState(null, document.title, window.location.pathname + window.location.search);
+            }
+            
             // 直接從 DOM 刪除遮罩，乾淨俐落
             document.getElementById('overlay').remove();
             // 顯示說明文件
             document.getElementById('content').style.display = 'block';
+            
+            // 新增中文註解：在內容排版完成後默默把 hash 放回網址，但不觸發任何頁面滾動
+            if (hash) {
+                setTimeout(function() {
+                    history.replaceState(null, document.title, window.location.pathname + window.location.search + hash);
+                }, 200);
+            }
+        });
+
+        // 新增中文註解：監聽內容區所有的錨點超連結點擊，實現平滑滾動效果
+        document.getElementById('content').addEventListener('click', function(e) {
+            var a = e.target.closest('a');
+            if (a) {
+                var href = a.getAttribute('href');
+                console.log('[Readme.html Debug] Clicked link href:', href);
+                if (href && href.indexOf('#') !== -1) {
+                    var hash = href.substring(href.indexOf('#'));
+                    var targetId = decodeURIComponent(hash.substring(1));
+                    console.log('[Readme.html Debug] Target element ID:', targetId);
+                    var element = document.getElementById(targetId);
+                    if (element) {
+                        e.preventDefault();
+                        console.log('[Readme.html Debug] Element found! Scrolling smoothly to:', targetId);
+                        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        // 更新瀏覽器歷史狀態中的 hash，但不引發預設的跳躍
+                        history.pushState(null, null, hash);
+                    } else {
+                        console.warn('[Readme.html Debug] Target element not found for ID:', targetId);
+                    }
+                }
+            }
         });
     </script>
 </body>

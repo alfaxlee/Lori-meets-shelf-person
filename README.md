@@ -503,8 +503,16 @@ main.js
     │   └── boss/LoliStateMachine.js   （只 import bossState）
     ├── boss/UncleStateMachine.js
     │   └── boss/UncleAttacks.js       （import 攻擊啟停與清理函式）
-    └── boss/UncleAttacks.js
-        └── boss/UncleStateMachine.js  （只 import uncleState）
+    ├── boss/UncleAttacks.js
+    │   └── boss/UncleStateMachine.js  （只 import uncleState）
+    ├── boss/DoraStateMachine.js       （新增中文註解：加入哆啦噩夢依賴關係）
+    │   ├── boss/DoraAttacks.js
+    │   └── ui/HUD.js
+    ├── boss/DoraAttacks.js
+    │   └── boss/DoraStateMachine.js
+    ├── boss/YeahStateMachine.js       （新增中文註解：加入顏王Yeah依賴關係）
+    │   └── scenes/GameScene.js        （呼叫 triggerHolyCinematic 必殺動畫）
+    └── boss/YeahAttacks.js
 ```
 
 > ⚠️ `LoliAttacks.js` 與 `LoliStateMachine.js` 之間存在**部分循環引用**。
@@ -534,6 +542,9 @@ initAttackRefs({ loli, player, shockwaves, lasers, enemyBalls });
 initBossRefs({ loli, player, lasers, enemyBalls, shockwaves, onLoliDeath });
 initUncleRefs({ uncle, uncleHPText, onUncleDeath, player, mgBullets, sgBullets, snBullets });
 initUncleStateRefs({ uncle, uncleHPText, onUncleDeath, player });
+initDoraStateRefs({ dora, player, doraHPText, clone1HPText, clone2HPText, platforms, mgBullets, sgBullets, snBullets, onDoraDeath }); // 新增中文註解：注入哆啦狀態參考
+initDoraAttackRefs({ dora, player, doraHPText, clone1HPText, clone2HPText, platforms }); // 新增中文註解：注入哆啦攻擊參考
+initYeahStateRefs({ yeah, yeahHPText, yeahEnergyBar, yeahEnergyBalls, onYeahDeath }); // 新增中文註解：注入顏王狀態參考
 ```
 
 ### 物理群組
@@ -546,6 +557,7 @@ initUncleStateRefs({ uncle, uncleHPText, onUncleDeath, player });
 | `shockwaves` | 衝擊波 | 碰牆消失 |
 | `lasers` | 雷射/海嘯等 | body.enable = false（僅碰撞偵測用） |
 | `enemyBalls` | 彈跳球 | 碰地板反彈，碰天花板/牆消失 |
+| `yeahEnergyBalls` | 顏王黃色能量球 | 碰玩家消失，累積 8 顆觸發神聖魔法必殺 (新增中文註解：物理群組表格加入能量球) |
 
 ### 編碼規則
 
@@ -585,6 +597,25 @@ initUncleStateRefs({ uncle, uncleHPText, onUncleDeath, player });
 | `attackQueue` | 攻擊佇列陣列，儲存待執行的攻擊類型 |
 | `hammer` | 當前大槌 Graphics 物件參考 |
 | `spikes` | 當前所有地刺物件陣列 |
+
+<!-- 新增中文註解：在注意事項新增哆啦與顏王的狀態旗標速查表格 -->
+### doraState 狀態旗標速查（哆啦噩夢）
+
+| 旗標 | 說明 |
+|------|------|
+| `isDomainExpanded` | 是否已展開一般領域（登場 0.5 秒後自動啟動，玩家/子彈/重力速度減半） |
+| `isTrueDomain` | 是否處於真領域展開狀態（HP ≤ 125 時啟動） |
+| `isTrueDomainTransition` | 是否處於真領域展開的過場動畫（此時無敵、全螢幕靜止） |
+| `isHit` | 是否處於受擊硬直中（會閃紅與後退） |
+| `clones` | 儲存 2 個真領域召喚分身 `{ clone1, clone2 }` 的物理 Sprite 與狀態引用 |
+
+### yeahState 狀態旗標速查（顏王Yeah）
+
+| 旗標 | 說明 |
+|------|------|
+| `holyEnergy` | 當前的神聖魔法能量值 (0 ~ 100) |
+| `collectedBalls` | 玩家目前已收集到的黃色能量球數量 (最高 8 顆，集滿觸發必殺) |
+| `isHit` | 是否處於受擊硬直中（閃紅、後退、震動） |
 
 
 
