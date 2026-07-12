@@ -2804,15 +2804,159 @@ function showFinalEndingCredits(scene) {
                                             color: textColor,
                                             fontWeight: 'bold',
                                             textShadow: `0 0 30px ${textColor}`,
-                                            lineHeight: '1.4',
-                                            animation: 'drive-glitch 0.15s infinite alternate' // 沿用震動動畫
+                                            lineHeight: '1.4'
                                         });
                                         contentWrapper.appendChild(finalQuestion);
 
                                         // 淡入新問題 (新增中文註解：淡入終極問題)
                                         contentWrapper.style.opacity = '1';
-                                    }, 1000);
-                                };
+
+                                        // 盯著看兩秒後，跳出解密題目選擇 (新增中文註解：盯著問題看兩秒後，淡入顯示謎題版本選擇)
+                                        setTimeout(() => {
+                                            contentWrapper.style.opacity = '0';
+                                            setTimeout(() => {
+                                                // 清空容器並建立選擇介面 (新增中文註解：清空容器並建立謎題選擇介面)
+                                                contentWrapper.innerHTML = '';
+
+                                                // 選擇標題 (新增中文註解：建立謎題選擇標題)
+                                                const choiceTitle = document.createElement('div');
+                                                choiceTitle.innerText = "請選擇要挑戰的謎題版本：";
+                                                Object.assign(choiceTitle.style, {
+                                                    fontSize: '28px',
+                                                    color: '#ffd700',
+                                                    fontWeight: 'bold',
+                                                    textShadow: '0 0 10px rgba(255, 215, 0, 0.5)',
+                                                    marginBottom: '20px'
+                                                });
+                                                contentWrapper.appendChild(choiceTitle);
+
+                                                // 按鈕容器 (新增中文註解：建立選擇按鈕容器)
+                                                const choiceBtnContainer = document.createElement('div');
+                                                Object.assign(choiceBtnContainer.style, {
+                                                    display: 'flex',
+                                                    gap: '40px',
+                                                    marginTop: '10px'
+                                                });
+                                                contentWrapper.appendChild(choiceBtnContainer);
+
+                                                // 輔助函式：顯示具體謎題內容 (新增中文註解：顯示具體謎題的輔助函式)
+                                                const showSelectedPuzzle = (puzzleText) => {
+                                                    contentWrapper.style.opacity = '0';
+                                                    setTimeout(() => {
+                                                        contentWrapper.innerHTML = '';
+                                                        
+                                                        // 第一行文字：好啦，給你點有用、好笑的。 (新增中文註解：建立第一行謎題文字)
+                                                        const line1 = document.createElement('div');
+                                                        line1.innerText = "好啦，給你點有用、好笑的。";
+                                                        Object.assign(line1.style, {
+                                                            fontSize: '28px',
+                                                            color: '#ffd700',
+                                                            fontWeight: 'bold',
+                                                            textShadow: '0 0 10px rgba(255, 215, 0, 0.5)',
+                                                            marginBottom: '15px'
+                                                        });
+                                                        
+                                                        // 第二行文字：請破解這段謎題 (新增中文註解：建立第二行謎題文字)
+                                                        const line2 = document.createElement('div');
+                                                        line2.innerText = "請破解這段謎題";
+                                                        Object.assign(line2.style, {
+                                                            fontSize: '34px',
+                                                            color: '#00ff00',
+                                                            fontWeight: 'bold',
+                                                            textShadow: '0 0 15px rgba(0, 255, 0, 0.6)',
+                                                            marginBottom: '25px'
+                                                        });
+                                                        
+                                                        // 第三行文字：謎題內容 (新增中文註解：建立第三行謎題內容)
+                                                        const line3 = document.createElement('div');
+                                                        line3.innerText = puzzleText;
+                                                        Object.assign(line3.style, {
+                                                            fontSize: '24px', // 因新謎題字數非常多，縮小字級防止超出排版 (修改)
+                                                            color: '#ff3333',
+                                                            fontWeight: 'bold',
+                                                            textShadow: '0 0 25px rgba(255, 51, 51, 0.8)',
+                                                            lineHeight: '1.5',
+                                                            maxWidth: '800px',
+                                                            wordBreak: 'break-all'
+                                                        });
+                                                        
+                                                        contentWrapper.appendChild(line1);
+                                                        contentWrapper.appendChild(line2);
+                                                        contentWrapper.appendChild(line3);
+                                                        
+                                                        // 淡入顯示謎題 (新增中文註解：淡入謎題)
+                                                        contentWrapper.style.opacity = '1';
+                                                     }, 1000);
+                                                 };
+
+                                                 // 原本的謎題按鈕 (新增中文註解：建立原本的謎題按鈕)
+                                                 const origBtn = document.createElement('button');
+                                                 origBtn.innerText = "原本的謎題";
+                                                 Object.assign(origBtn.style, {
+                                                     padding: '12px 30px',
+                                                     fontSize: '18px',
+                                                     borderRadius: '8px',
+                                                     border: '2px solid #00ff00',
+                                                     backgroundColor: 'rgba(0, 255, 0, 0.1)',
+                                                     color: '#00ff00',
+                                                     fontWeight: 'bold',
+                                                     cursor: 'pointer',
+                                                     boxShadow: '0 0 12px rgba(0, 255, 0, 0.2)',
+                                                     fontFamily: "'Microsoft JhengHei', sans-serif",
+                                                     transition: 'all 0.2s'
+                                                 });
+                                                 origBtn.onmouseover = () => {
+                                                     origBtn.style.backgroundColor = '#00ff00';
+                                                     origBtn.style.color = '#000000';
+                                                     origBtn.style.boxShadow = '0 0 20px rgba(0, 255, 0, 0.6)';
+                                                 };
+                                                 origBtn.onmouseout = () => {
+                                                     origBtn.style.backgroundColor = 'rgba(0, 255, 0, 0.1)';
+                                                     origBtn.style.color = '#00ff00';
+                                                     origBtn.style.boxShadow = '0 0 12px rgba(0, 255, 0, 0.2)';
+                                                 };
+                                                 origBtn.onclick = () => {
+                                                     showSelectedPuzzle("爸爸堅強又偉大八極大狂風大牛比較懶高高翹起博愛座");
+                                                 };
+
+                                                 // 新的謎題按鈕 (新增中文註解：建立新的謎題按鈕)
+                                                 const newBtn = document.createElement('button');
+                                                 newBtn.innerText = "新的謎題";
+                                                 Object.assign(newBtn.style, {
+                                                     padding: '12px 30px',
+                                                     fontSize: '18px',
+                                                     borderRadius: '8px',
+                                                     border: '2px solid #00ffff',
+                                                     backgroundColor: 'rgba(0, 255, 255, 0.1)',
+                                                     color: '#00ffff',
+                                                     fontWeight: 'bold',
+                                                     cursor: 'pointer',
+                                                     boxShadow: '0 0 12px rgba(0, 255, 255, 0.2)',
+                                                     fontFamily: "'Microsoft JhengHei', sans-serif",
+                                                     transition: 'all 0.2s'
+                                                 });
+                                                 newBtn.onmouseover = () => {
+                                                     newBtn.style.backgroundColor = '#00ffff';
+                                                     newBtn.style.color = '#000000';
+                                                     newBtn.style.boxShadow = '0 0 20px rgba(0, 255, 255, 0.6)';
+                                                 };
+                                                 newBtn.onmouseout = () => {
+                                                     newBtn.style.backgroundColor = 'rgba(0, 255, 255, 0.1)';
+                                                     newBtn.style.color = '#00ffff';
+                                                     newBtn.style.boxShadow = '0 0 12px rgba(0, 255, 255, 0.2)';
+                                                 };
+                                                 newBtn.onclick = () => {
+                                                     showSelectedPuzzle("高高舉起博愛座了不起博愛做完高鐵的工人上帝掉皮包皮包大特賣金色狂風七人對金色狂風直升機大好的山中美景");
+                                                 };
+
+                                                 choiceBtnContainer.appendChild(origBtn);
+                                                 choiceBtnContainer.appendChild(newBtn);
+
+                                                 contentWrapper.style.opacity = '1';
+                                             }, 1000);
+                                         }, 2000);
+                                     }, 1000);
+                                 };
 
                                 // 綁定點擊事件 (新增中文註解：為是與沒有按鈕綁定跳轉終極問題的點擊事件)
                                 yesBtn.onclick = () => {

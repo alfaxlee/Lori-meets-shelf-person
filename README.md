@@ -4,7 +4,7 @@
 <!-- 新增中文註解：在大標題下方、簡介上方插入隱藏彩蛋內容 -->
 ## 隱藏內容 (Hidden Easter Egg)
 
- Tphitg Tvv: Lwtc ndj sxt id sgphixr sgde xc ewnhxrpa piigprixktcthh, hrgdaa sdlc iwt htatrixdc hrgttc id uxcs p wxsstc qjiidc id apjcrw iwt Eajid Rpccdc. Iwxh igxvvtgh p rxctbpixr tktci lwtgt iwt qdhh Ntpw xh hlpaadlts qn p qaprz wdat pcs dqaxitgpits xc p bphhxkt tmeadhxdc. Puitg iwt hnhitb vaxirwth, paa udjg qdhhth axct je pcs qadl iwtbhtakth je. Dcrt iwt rgtsxih peetpg, tcitg iwt htrgti ephhldgs '自爆' id tcitg p spgz fjthixdccpxgt. Pchltgxcv 'Nth' atpsh id 'Pgt ndj vpn?', lwxat pchltgxcv 'Cd' atpsh id 'Sd ndj wpkt rwxrztc itcstgh?'.
+ Tphitg Tvv: Lwtc ndj sxt id sgphixr sgde xc ewnhxrpa piigprixktcthh, hrgdaa sdlc iwt htatrixdc hrgttc id uxcs p wxsstc qjiidc id apjcrw iwt Eajid Rpccdc. Iwxh igxvvtgh p rxctbpixr tktci lwtgt iwt qdhh Ntpw xh hlpaadlts qn p qaprz wdat pcs dqaxitgpits xc p bphhxkt tmeadhxdc. Puitg iwt hnhitb vaxirwth, paa udjg qdhhth axct je pcs qadl iwtbhtakth je. Dcrt iwt rgtsxih peetpg, tcitg iwt htrgti ephhldgs '自爆' id tcitg p spgz fjthixdccpxgt. Pchltgxcv 'Nth' atpsh id 'Pgt ndj vpn?', lwxat pchltgxcv 'Cd' atpsh id 'Sd ndj wpkt rwxrztc itcstgh?'. Puitg hipgxcv udg 2 htrdcsh, ndj rpc rwddht qtilttc iwt 'Dgxvxcpa Ejooat' dg iwt 'Ctl Ejooat'. Rwddhxcv iwt dgxvxcpa dct hwdlh '爸爸堅強又偉大八極大狂風大牛比較懶高高翹起博愛座', lwxat rwddhxcv iwt ctl dct hwdlh '高高舉起博愛座了不起博愛做完高鐵的工人上帝掉皮包皮包大特賣金色狂風七人對金色狂風直升機大好的山中美景'.
 <!-- 新增中文註解：在密文下方加入解密提示文字 -->
 Caesar Cipher, move with the number now that all kids are saying😏😏
 
