@@ -179,15 +179,15 @@ export class BossSelectScene extends Phaser.Scene {
     constructor() {
         super('BossSelectScene');
     }
-
     create() {
         const width = this.cameras.main.width;
         const height = this.cameras.main.height;
+        const sceneHeight = 920; // 新增中文註解：定義包含滾動範圍的場景總高度，使背景與金色粒子完全覆蓋滾動後的區域
 
         // 設定漸層背景以保持視覺風格一致
         const bgGfx = this.add.graphics();
         bgGfx.fillGradientStyle(0x1a1a1a, 0x1a1a1a, 0x050505, 0x050505, 1);
-        bgGfx.fillRect(0, 0, width, height);
+        bgGfx.fillRect(0, 0, width, sceneHeight); // 新增中文註解：改為填滿 sceneHeight 920 像素
 
         // === 同步建立金光點背景特效 ===
         const particles = this.add.graphics();
@@ -195,7 +195,7 @@ export class BossSelectScene extends Phaser.Scene {
         for (let i = 0; i < 45; i++) {
             stars.push({
                 x: Phaser.Math.Between(0, width),
-                y: Phaser.Math.Between(0, height),
+                y: Phaser.Math.Between(0, sceneHeight), // 新增中文註解：粒子生成高度改為 sceneHeight 920 像素
                 size: Phaser.Math.Between(1, 3),
                 alpha: Phaser.Math.FloatBetween(0.15, 0.7),
                 speed: Phaser.Math.FloatBetween(0.2, 0.8)
@@ -206,7 +206,7 @@ export class BossSelectScene extends Phaser.Scene {
             stars.forEach(star => {
                 star.y -= star.speed;
                 if (star.y < -10) {
-                    star.y = height + 10;
+                    star.y = sceneHeight + 10; // 新增中文註解：超出頂部時重置回 sceneHeight 底部
                     star.x = Phaser.Math.Between(0, width);
                 }
                 particles.fillStyle(0xd4af37, star.alpha);
@@ -235,42 +235,109 @@ export class BossSelectScene extends Phaser.Scene {
             }
         }).setOrigin(0.5);
 
-        // 建立「蘿莉」Boss 選卡 (修改為六等分水平排列，以容納五位 Boss，新增中文註解：將選卡排列改為 6 等分以加入請屎皇)
-        this.createBossCard(width / 6, height / 2, 'loliSelect', '蘿莉', () => {
+        // === 建立 Boss 選卡 (新增中文註解：設定滑動滾動與大卡片尺寸 (240x320)，避免與標題或返回按鈕重疊) ===
+        // 設定水平與垂直間距，回到原本大尺寸卡片排版
+        const colSpacing = 300; // 卡片中心水平間距
+        const firstRowY = 290;  // 第一排 Y 座標 (頂部 Y=130，與 Y=80 的標題保持安全距離)
+        const secondRowY = 670; // 第二排 Y 座標 (卡片到底 Y=830)
+
+        // 啟用滑動機制：場景邊界設為 0, 0, width, 920，最大 scrollY 設為 200 (新增中文註解：啟用相機滑動)
+        this.cameras.main.setBounds(0, 0, width, 920);
+
+        // 建立滑動提示文字 (新增中文註解：在下方建立一個指示有更多內容的提示文字)
+        const scrollHint = this.add.text(width / 2, height - 30, '▼ 向下滾動以查看更多 Boss', {
+            fontSize: '16px',
+            fill: '#ffd700',
+            fontStyle: 'bold',
+            shadow: { color: '#000000', fill: true, blur: 5 }
+        }).setOrigin(0.5);
+        scrollHint.setScrollFactor(0); // 固定在螢幕底端，不受滾動影響
+
+        // 提示文字呼吸動畫 (新增中文註解：文字呼吸動畫)
+        this.tweens.add({
+            targets: scrollHint,
+            alpha: 0.3,
+            duration: 1000,
+            yoyo: true,
+            repeat: -1
+        });
+
+        // 滾輪滾動事件 (新增中文註解：設定滑鼠滾輪滾動相機)
+        this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY, deltaZ) => {
+            this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY + deltaY * 0.5, 0, 200);
+            if (this.cameras.main.scrollY > 30) {
+                scrollHint.setVisible(false);
+            } else {
+                scrollHint.setVisible(true);
+            }
+        });
+
+        // 手勢拖曳（適用於行動裝置或滑鼠拖曳，新增中文註解：設定滑鼠/觸控拖曳背景滾動相機）
+        let dragStartY = 0;
+        let isDragging = false;
+        this.input.on('pointerdown', (pointer) => {
+            const hits = this.input.manager.hitTest(pointer, this.children.list, this.cameras.main);
+            // 只有點擊背景時才啟動拖曳滾動
+            if (hits.length === 0) {
+                isDragging = true;
+                dragStartY = pointer.y;
+            }
+        });
+
+        this.input.on('pointermove', (pointer) => {
+            if (isDragging) {
+                const diffY = dragStartY - pointer.y;
+                this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY + diffY, 0, 200);
+                dragStartY = pointer.y;
+                if (this.cameras.main.scrollY > 30) {
+                    scrollHint.setVisible(false);
+                } else {
+                    scrollHint.setVisible(true);
+                }
+            }
+        });
+
+        this.input.on('pointerup', () => {
+            isDragging = false;
+        });
+
+        // 第一排三個卡片以螢幕中心為基準緊湊排列
+        this.createBossCard(width / 2 - colSpacing, firstRowY, 'loliSelect', '蘿莉', () => {
             this.scene.start('GameScene', { selectedBoss: 'loli' });
         });
 
         // 建立「猥瑣大叔」Boss 選卡
-        this.createBossCard(2 * width / 6, height / 2, 'uncleSelect', '猥瑣大叔', () => {
+        this.createBossCard(width / 2, firstRowY, 'uncleSelect', '猥瑣大叔', () => {
             this.scene.start('GameScene', { selectedBoss: 'uncle' });
         });
 
         // 建立「哆啦噩夢」Boss 選卡
-        this.createBossCard(3 * width / 6, height / 2, 'doraSelect', '哆啦噩夢', () => {
+        this.createBossCard(width / 2 + colSpacing, firstRowY, 'doraSelect', '哆啦噩夢', () => {
             this.scene.start('GameScene', { selectedBoss: 'dora' });
         });
 
-        // 建立「顏王Yeah」Boss 選卡
-        this.createBossCard(4 * width / 6, height / 2, 'yeahSelect', '顏王Yeah', () => {
+        // 第二排兩個卡片 (新增中文註解：不置中，與第一排的左邊和中間卡片對齊)
+        this.createBossCard(width / 2 - colSpacing, secondRowY, 'yeahSelect', '顏王Yeah', () => {
             this.scene.start('GameScene', { selectedBoss: 'yeah' });
         });
 
         // 建立「請屎皇」Boss 選卡
-        this.createBossCard(5 * width / 6, height / 2, 'poopKingSelect', '請屎皇', () => {
+        this.createBossCard(width / 2, secondRowY, 'poopKingSelect', '請屎皇', () => {
             this.scene.start('GameScene', { selectedBoss: 'poopKing' });
         });
 
-        // 返回主選單按鈕 (改為金色矮型按鈕)
-        this.createBackButton(width / 2, height - 80, '返回主選單', () => {
+        // 返回主選單按鈕 (改至左上角 X=130, Y=50，並固定在畫面上不受滾動影響)
+        this.createBackButton(130, 50, '返回主選單', () => {
             this.scene.start('MainMenuScene');
         });
     }
 
     // 輔助函式：建立 Boss 選卡 (等比例圖片 + 金色描邊發光卡片)
+    // 新增中文註解：卡片尺寸回到原本的 240x320，適用於可捲動版面
     createBossCard(x, y, textureKey, bossName, callback) {
         const cardBg = this.add.graphics();
         
-        // 預設卡片框線
+        // 預設卡片框線 (新增中文註解：設定尺寸為 240x320)
         const drawDefault = () => {
             cardBg.clear();
             cardBg.fillStyle(0x1a1a1a, 0.9);
@@ -279,7 +346,7 @@ export class BossSelectScene extends Phaser.Scene {
             cardBg.strokeRoundedRect(-120, -160, 240, 320, 15);
         };
         
-        // 懸停高亮框線
+        // 懸停高亮框線 (新增中文註解：設定尺寸為 240x320)
         const drawHover = () => {
             cardBg.clear();
             cardBg.fillStyle(0x2a2a2a, 0.95);
@@ -290,7 +357,7 @@ export class BossSelectScene extends Phaser.Scene {
 
         drawDefault();
 
-        // Boss 圖片 (等比例縮放以防止形變)
+        // Boss 圖片 (等比例縮放以防止形變，新增中文註解：圖片最大寬高回到 180，位置為 0, -30)
         const bossImg = this.add.image(0, -30, textureKey);
         const maxW = 180;
         const maxH = 180;
@@ -299,7 +366,7 @@ export class BossSelectScene extends Phaser.Scene {
         const scale = Math.min(scaleX, scaleY);
         bossImg.setScale(scale);
 
-        // Boss 名稱
+        // Boss 名稱 (新增中文註解：字型大小回到 28px，位置在 Y: 100)
         const nameText = this.add.text(0, 100, bossName, {
             fontSize: '28px',
             fill: '#ffffff',
@@ -342,6 +409,7 @@ export class BossSelectScene extends Phaser.Scene {
     }
 
     // 建立返回按鈕 (金色矮型樣式)
+    // 新增中文註解：在按鈕中繪製金色返回箭頭圖示，並使按鈕不受螢幕滾動影響
     createBackButton(x, y, label, callback) {
         const bg = this.add.graphics();
         const drawDefault = () => {
@@ -350,6 +418,17 @@ export class BossSelectScene extends Phaser.Scene {
             bg.fillRoundedRect(-100, -20, 200, 40, 8);
             bg.lineStyle(1.5, 0xd4af37, 0.5); // 金色邊框
             bg.strokeRoundedRect(-100, -20, 200, 40, 8);
+            
+            // 繪製箭頭 (新增中文註解：在預設狀態繪製返回箭頭線條)
+            bg.lineStyle(2, 0xd4af37, 0.8);
+            bg.beginPath();
+            bg.moveTo(-50, 0);
+            bg.lineTo(-35, -7);
+            bg.moveTo(-50, 0);
+            bg.lineTo(-35, 7);
+            bg.moveTo(-50, 0);
+            bg.lineTo(-15, 0);
+            bg.strokePath();
         };
         const drawHover = () => {
             bg.clear();
@@ -357,10 +436,21 @@ export class BossSelectScene extends Phaser.Scene {
             bg.fillRoundedRect(-100, -20, 200, 40, 8);
             bg.lineStyle(2, 0xffd700, 1);
             bg.strokeRoundedRect(-100, -20, 200, 40, 8);
+            
+            // 繪製發光箭頭 (新增中文註解：在懸停狀態下繪製發光的返回箭頭)
+            bg.lineStyle(2.5, 0xffd700, 1);
+            bg.beginPath();
+            bg.moveTo(-50, 0);
+            bg.lineTo(-35, -7);
+            bg.moveTo(-50, 0);
+            bg.lineTo(-35, 7);
+            bg.moveTo(-50, 0);
+            bg.lineTo(-15, 0);
+            bg.strokePath();
         };
         drawDefault();
 
-        const txt = this.add.text(0, 0, label, {
+        const txt = this.add.text(20, 0, label, { // 新增中文註解：往右偏 20 像素避開左側的箭頭圖示
             fontSize: '18px',
             fill: '#dddddd',
             fontStyle: 'bold',
@@ -370,6 +460,7 @@ export class BossSelectScene extends Phaser.Scene {
         const container = this.add.container(x, y, [bg, txt]);
         container.setSize(200, 40);
         container.setInteractive({ useHandCursor: true });
+        container.setScrollFactor(0); // 新增中文註解：返回按鈕固定在畫面上不受滾動影響
 
         container.on('pointerover', () => {
             drawHover();
