@@ -16,7 +16,7 @@ import { initYeahStateRefs, yeahState, handleYeahHit, updateYeahStateMachine, re
 import { initYeahAttackRefs } from '../boss/YeahAttacks.js';
 import { initPoopKingStateRefs, poopKingState, handlePoopKingHit, updatePoopKingStateMachine, respawnPoopKing, cleanupPoopKing } from '../boss/PoopKingStateMachine.js';
 import { initPoopKingAttackRefs } from '../boss/PoopKingAttacks.js';
-import { initNoGGStateRefs, noGGState, handleNoGGHit, updateNoGGStateMachine, respawnNoGG, cleanupNoGG } from '../boss/NoGGStateMachine.js';
+import { initNoGGStateRefs, noGGState, handleNoGGHit, updateNoGGStateMachine, respawnNoGG, cleanupNoGG, triggerCXKDeathQuiz } from '../boss/NoGGStateMachine.js';
 
 let player;
 let loli;
@@ -81,6 +81,13 @@ function preloadAssets() {
     this.load.image('noGG', './assets/images/我沒有GG.jpg');
     // 載入迪克小刀 圖片 (新增中文註解：載入迪克小刀攻擊素材)
     this.load.image('dickKnife', './assets/images/迪克小刀.jpg');
+    // 載入蔡徐坤第二階段 4 張圖片素材 (新增中文註解：載入蔡徐坤階段換圖素材)
+    this.load.image('cxk_1', './assets/images/cxk_1.jpg');
+    this.load.image('cxk_2', './assets/images/cxk_2.jpg');
+    this.load.image('cxk_3', './assets/images/cxk_3.jpg');
+    this.load.image('cxk_4', './assets/images/cxk_4.jpg');
+    // 載入蔡徐坤中分頭爆炸圖片素材 (新增中文註解：載入中分頭絕招圖片)
+    this.load.image('cxk_explode', './assets/images/cxk_explode.jpg');
 
     // 載入北極熊走路 gif 拆解的 16 個影格 (新增中文註解：載入北極熊動畫格)
     for (let i = 0; i < 16; i++) {
@@ -262,7 +269,7 @@ function createScene() {
     this.physics.add.collider(noGG, sgBullets, (obj1, obj2) => { handleNoGGHit(this, obj2, 400, 150, 25); });
     this.physics.add.collider(noGG, snBullets, (obj1, obj2) => { handleNoGGHit(this, obj2, 1500, 500, 50); });
 
-    // 迪克小刀碰撞邏輯 (新增中文註解：迪克小刀碰到地板銷毀，碰到玩家當機即死)
+    // 迪克小刀碰撞邏輯 (新增中文註解：第一階段迪克小刀碰到地板銷毀，碰到玩家直接當機，不進入考題)
     this.physics.add.collider(dickKnives, platforms, (knife) => { knife.destroy(); });
     this.physics.add.overlap(player, dickKnives, triggerCrash);
 
@@ -322,10 +329,14 @@ function createScene() {
         // 不在此消耗護盾：盾牌只有在主動擊退 Boss 時才消耗（createDashShield 的距離判定），讓護盾真正全面防禦 (修改)
         triggerCrash();
     });
-    // 碰到我沒有GG也會當機 (碰觸即死) (新增中文註解：玩家碰撞我沒有GG即死判定，加入衝刺無敵與防重複觸發判定)
+    // 碰到我沒有GG / 蔡徐坤 (新增中文註解：第一階段直接當機保持神秘感；第二階段蔡徐坤觸發全黑神秘試題考驗)
     this.physics.add.collider(player, noGG, () => {
         if (playerState.cannotMove || playerState.isInvincible || playerState.isDashing) return;
-        triggerCrash();
+        if (noGGState.isPhase2) {
+            triggerCXKDeathQuiz(this); // 第二階段死於蔡徐坤進入全黑神秘試題
+        } else {
+            triggerCrash(); // 第一階段我沒有GG直接當機，保持神秘感
+        }
     });
     this.physics.add.overlap(player, shockwaves, triggerCrash); // 玩家碰到衝擊波也會當機
     this.physics.add.overlap(player, enemyBalls, triggerCrash); // 玩家碰到彈跳球也會當機
@@ -433,8 +444,8 @@ function createScene() {
     }).setOrigin(0.5, 0);
     poopKingHPText.setVisible(false);
 
-    // 我沒有GG血量文字 (初始隱藏，設定血量為 500，顏色為粉紅/紫色) (新增中文註解：建立我沒有GG HP 文字)
-    noGGHPText = this.add.text(width / 2, 100, `我沒有GG血量: 500`, { 
+    // 我沒有GG血量文字 (初始隱藏，設定第一階段血量為 100，顏色為粉紅/紫色) (新增中文註解：建立我沒有GG HP 文字)
+    noGGHPText = this.add.text(width / 2, 100, `我沒有GG血量: 100`, { 
         fontSize: '30px', 
         fill: '#ff00ff', // 粉紅/紫色
         fontStyle: 'bold', 
@@ -503,8 +514,8 @@ function createScene() {
     // 初始化請屎皇攻擊模組參考 (新增中文註解：初始化請屎皇的攻擊模組參考，傳入 poopKingState 以便控制攻擊狀態)
     initPoopKingAttackRefs({ poopKing, player, poopKingHPText, platforms, poopKingState });
 
-    // 初始化我沒有GG狀態機參考 (新增中文註解：初始化我沒有GG的狀態機參考，傳入 dickKnives 以便發射迪克小刀)
-    initNoGGStateRefs({ noGG, player, noGGHPText, platforms, dickKnives, onNoGGDeath: (scene) => {
+    // 初始化我沒有GG狀態機參考 (新增中文註解：初始化我沒有GG與蔡徐坤的狀態機參考，傳入 dickKnives 與 loli)
+    initNoGGStateRefs({ noGG, player, noGGHPText, platforms, dickKnives, loli, onNoGGDeath: (scene) => {
         respawnNoGG(scene);
     }});
 
@@ -686,8 +697,8 @@ function updateScene(time, delta) {
     // 依據當前選定 Boss 決定自動瞄準目標與碰撞對象 (新增中文註解：加入請屎皇與我沒有GG到 activeBoss 的判定)
     const activeBoss = this.selectedBoss === 'uncle' ? uncle : (this.selectedBoss === 'dora' ? dora : (this.selectedBoss === 'yeah' ? yeah : (this.selectedBoss === 'poopKing' ? poopKing : (this.selectedBoss === 'noGG' ? noGG : loli))));
 
-    // 繪製衝刺能量條（委派給 HUD 模組）
-    drawEnergyBar(playerState.dashEnergy, playerState.maxDashEnergy, playerState.dashEnergyColor);
+    // 繪製衝刺能量條（委派給 HUD 模組，僅在請屎皇戰鬥中繪製衝刺警示）(修改)
+    drawEnergyBar(playerState.dashEnergy, playerState.maxDashEnergy, playerState.dashEnergyColor, this.selectedBoss === 'poopKing');
 
     // 玩家移動與衝刺控制（委派給 PlayerController 模組）
     updatePlayer(this, player, activeBoss, createDashShield);
@@ -3198,11 +3209,14 @@ function createDashShield(scene, player, angle) {
                 hasHitPoopKing = true;
             }
         }
-        // 護盾碰撞我沒有GG (新增中文註解：護盾碰撞我沒有GG判定，使其可被盾牌攻擊)
+        // 護盾碰撞我沒有GG (新增中文註解：護盾碰撞我沒有GG判定，第二階段蔡徐坤如同石頭免疫護盾傷害與擊退，阻擋玩家)
         if (!hasHitNoGG && noGG && noGG.active) {
             const distNGG = Phaser.Math.Distance.Between(centerX, centerY, noGG.x, noGG.y);
             if (distNGG < radius + 40) {
-                handleNoGGHit(scene, null, 1500, 500, 25, centerX, centerY);
+                // 第二階段蔡徐坤為石頭剛體，不會死也不會被護盾擊退，實體阻擋玩家 (修改)
+                if (!noGGState.isPhase2) {
+                    handleNoGGHit(scene, null, 1500, 500, 25, centerX, centerY);
+                }
                 hasHitNoGG = true;
             }
         }

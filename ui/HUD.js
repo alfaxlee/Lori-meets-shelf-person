@@ -55,14 +55,15 @@ export function showLoliHPText(visible) {
  * @param {number} dashEnergy - 目前能量
  * @param {number} maxDashEnergy - 最大能量
  * @param {number} dashEnergyColor - 能量條顏色
+ * @param {boolean} isPoopKing - 是否正在與請屎皇戰鬥 (新增中文註解：僅在與請屎皇戰鬥時顯示衝刺警示)
  */
-export function drawEnergyBar(dashEnergy, maxDashEnergy, dashEnergyColor) {
+export function drawEnergyBar(dashEnergy, maxDashEnergy, dashEnergyColor, isPoopKing = false) {
     if (!energyBar) return;
     energyBar.clear();
 
-    // 同步指示器文字與能量條可見度 (新增中文註解)
+    // 只有在與請屎皇戰鬥時才顯示衝刺警示文字 (新增中文註解)
     if (dashIndicatorText) {
-        dashIndicatorText.setVisible(energyBar.visible);
+        dashIndicatorText.setVisible(energyBar.visible && isPoopKing);
     }
 
     if (!energyBar.visible) return;
@@ -73,18 +74,20 @@ export function drawEnergyBar(dashEnergy, maxDashEnergy, dashEnergyColor) {
     energyBar.fillStyle(dashEnergyColor, 1);
     energyBar.fillRect(20, 100, barWidth * (dashEnergy / maxDashEnergy), 20);
 
-    // 繪製放大五倍的 Dash 指示器：圓形的黑圈，亮起時中間為紅色 (新增中文註解：繪製大型五倍警示圓圈)
-    const indicatorX = 75; // 位於能量條下方
-    const indicatorY = 200;
+    // 只有在與請屎皇戰鬥時才繪製衝刺警示圓圈 (新增中文註解)
+    if (isPoopKing) {
+        const indicatorX = 75; // 位於能量條下方
+        const indicatorY = 200;
 
-    // 繪製圓形黑外圈 (線寬從 3 放大至 10，半徑從 12 放大五倍至 60)
-    energyBar.lineStyle(10, 0x000000, 1.0);
-    energyBar.strokeCircle(indicatorX, indicatorY, 60);
+        // 繪製圓形黑外圈 (線寬 10，半徑 60)
+        energyBar.lineStyle(10, 0x000000, 1.0);
+        energyBar.strokeCircle(indicatorX, indicatorY, 60);
 
-    // 如果亮燈，則填滿紅色核心 (半徑從 8 放大五倍至 40)
-    if (playerState.isDashIndicatorLit) {
-        energyBar.fillStyle(0xff0000, 1.0);
-        energyBar.fillCircle(indicatorX, indicatorY, 40);
+        // 如果亮燈，則填滿紅色核心 (半徑 40)
+        if (playerState.isDashIndicatorLit) {
+            energyBar.fillStyle(0xff0000, 1.0);
+            energyBar.fillCircle(indicatorX, indicatorY, 40);
+        }
     }
 }
 
