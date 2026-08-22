@@ -16,6 +16,8 @@ export class MainMenuScene extends Phaser.Scene {
         this.load.image('yeahSelect', './assets/images/Yeah.jpg');
         // 預載請屎皇的選擇圖片 (新增中文註解：載入新 Boss 請屎皇的圖片)
         this.load.image('poopKingSelect', './assets/images/請屎皇.jpg');
+        // 預載我沒有GG 的選擇圖片 (新增中文註解：載入新 Boss 我沒有GG 的圖片)
+        this.load.image('noGGSelect', './assets/images/我沒有GG.jpg');
     }
 
     create() {
@@ -316,7 +318,7 @@ export class BossSelectScene extends Phaser.Scene {
             this.scene.start('GameScene', { selectedBoss: 'dora' });
         });
 
-        // 第二排兩個卡片 (新增中文註解：不置中，與第一排的左邊和中間卡片對齊)
+        // 第二排三個卡片 (新增中文註解：分別對齊第一排的左邊、中間、右邊卡片)
         this.createBossCard(width / 2 - colSpacing, secondRowY, 'yeahSelect', '顏王Yeah', () => {
             this.scene.start('GameScene', { selectedBoss: 'yeah' });
         });
@@ -324,6 +326,11 @@ export class BossSelectScene extends Phaser.Scene {
         // 建立「請屎皇」Boss 選卡
         this.createBossCard(width / 2, secondRowY, 'poopKingSelect', '請屎皇', () => {
             this.scene.start('GameScene', { selectedBoss: 'poopKing' });
+        });
+
+        // 建立「我沒有GG」Boss 選卡 (新增中文註解：建立我沒有GG選卡，排在第二排第三個)
+        this.createBossCard(width / 2 + colSpacing, secondRowY, 'noGGSelect', '我沒有GG', () => {
+            this.scene.start('GameScene', { selectedBoss: 'noGG' });
         });
 
         // 返回主選單按鈕 (改至左上角 X=130, Y=50，並固定在畫面上不受滾動影響)

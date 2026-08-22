@@ -16,6 +16,7 @@ import { initYeahStateRefs, yeahState, handleYeahHit, updateYeahStateMachine, re
 import { initYeahAttackRefs } from '../boss/YeahAttacks.js';
 import { initPoopKingStateRefs, poopKingState, handlePoopKingHit, updatePoopKingStateMachine, respawnPoopKing, cleanupPoopKing } from '../boss/PoopKingStateMachine.js';
 import { initPoopKingAttackRefs } from '../boss/PoopKingAttacks.js';
+import { initNoGGStateRefs, noGGState, handleNoGGHit, updateNoGGStateMachine, respawnNoGG, cleanupNoGG } from '../boss/NoGGStateMachine.js';
 
 let player;
 let loli;
@@ -39,6 +40,9 @@ let yeahEnergyBar;  // 顏王Yeah 神聖魔法能量條 Graphics
 let poopKing;          // 請屎皇 Sprite (新增中文註解：定義請屎皇精靈)
 let poopKingHPText;    // 請屎皇 血量文字 (新增中文註解：定義請屎皇血量顯示文字)
 let polarBear;         // 北極熊 Sprite (新增中文註解：定義北極熊精靈)
+let noGG;                  // 我沒有GG Sprite (新增中文註解：定義我沒有GG精靈)
+let noGGHPText;            // 我沒有GG 血量文字 (新增中文註解：定義我沒有GG血量顯示文字)
+let dickKnives;            // 迪克小刀攻擊群組 (新增中文註解：定義迪克小刀攻擊群組)
 
 // --- 武器系統變數 --- (已搬移至 weapons/WeaponManager.js)
 let shockwaves; // 衝擊波群組
@@ -73,6 +77,10 @@ function preloadAssets() {
     this.load.image('yeah', './assets/images/Yeah.jpg');
     // 載入請屎皇 圖片 (新增中文註解：載入請屎皇 Boss 圖片)
     this.load.image('poopKing', './assets/images/請屎皇.jpg');
+    // 載入我沒有GG 圖片 (新增中文註解：載入我沒有GG Boss 圖片)
+    this.load.image('noGG', './assets/images/我沒有GG.jpg');
+    // 載入迪克小刀 圖片 (新增中文註解：載入迪克小刀攻擊素材)
+    this.load.image('dickKnife', './assets/images/迪克小刀.jpg');
 
     // 載入北極熊走路 gif 拆解的 16 個影格 (新增中文註解：載入北極熊動畫格)
     for (let i = 0; i < 16; i++) {
@@ -109,6 +117,7 @@ function createScene() {
     shockwaves = this.physics.add.group(); // 初始化衝擊波群組
     lasers = this.physics.add.group();     // 初始化雷射攻擊群組
     enemyBalls = this.physics.add.group(); // 初始化敵人彈跳球群組
+    dickKnives = this.physics.add.group(); // 初始化迪克小刀攻擊群組 (新增中文註解)
 
     player = this.physics.add.sprite(width / 2, height - 150, '胖嘟嘟發電機');
     player.setScale(0.1);
@@ -175,6 +184,16 @@ function createScene() {
     poopKing.setVisible(false);
     poopKing.body.enable = false;
 
+    // 建立我沒有GG (新增中文註解：建立我沒有GG的 Sprite，初始放於畫面外遠處 (-500, -500) 防止開局瞬間與玩家重疊)
+    noGG = this.physics.add.sprite(-500, -500, 'noGG');
+    noGG.setDisplaySize(loli.displayWidth, loli.displayHeight);
+    noGG.body.setSize(noGG.width, noGG.height, true); // 初始化物理剛體大小為圖片原始尺寸以配合縮放 (修改)
+    noGG.setCollideWorldBounds(true);
+    noGG.setBounce(0.1);
+    noGG.setActive(false);
+    noGG.setVisible(false);
+    noGG.body.enable = false;
+
     // 建立北極熊 Sprite (預設不啟用與隱藏) (新增中文註解：建立北極熊精靈，縮小至 0.55 倍保持原比例且略大於請屎皇)
     polarBear = this.add.sprite(0, 0, 'polar_bear_0');
     polarBear.setScale(0.55); // 縮小至 0.55 倍，保持比例且稍大於請屎皇 (修改)
@@ -200,6 +219,19 @@ function createScene() {
         respawnLoli(scene);
     }});
 
+    // 當機畫面 (處理玩家死亡/受傷)
+    let isCrashed = false; // 防止多次觸發當機
+    const triggerCrash = (force = false) => {
+        // 確保 force 真的是布林值 true，因為 Phaser 的 collider 會傳入兩個遊戲物件(Truthy)
+        const isForced = force === true;
+        // 衝刺/護盾期間無敵 (若 isForced 為 true 則無視無敵)，或已當機則跳過
+        if ((playerState.isInvincible && !isForced) || isCrashed) return; 
+        isCrashed = true;
+        playerState.cannotMove = false; // 當機時解決定身狀態，避免復活或重啟時仍被定身 (新增中文註解)
+        showCrashScreen(this); // 委派給 CrashScreen 模組處理 DOM 與動畫
+    };
+    this.triggerCrash = triggerCrash; // 將當機函式掛載到場景，供外部雷射/地刺使用
+
     this.physics.add.collider(player, platforms);
     this.physics.add.collider(loli, platforms);
     this.physics.add.collider(uncle, platforms); // 猥瑣大叔與地板碰撞
@@ -222,6 +254,17 @@ function createScene() {
     this.physics.add.collider(poopKing, mgBullets, (obj1, obj2) => { handlePoopKingHit(this, obj2, 600, 200, 5); });
     this.physics.add.collider(poopKing, sgBullets, (obj1, obj2) => { handlePoopKingHit(this, obj2, 400, 150, 25); });
     this.physics.add.collider(poopKing, snBullets, (obj1, obj2) => { handlePoopKingHit(this, obj2, 1500, 500, 50); });
+
+    this.physics.add.collider(noGG, platforms);  // 我沒有GG與地板碰撞 (新增中文註解)
+
+    // 我沒有GG的子彈碰撞 (新增中文註解：設定我沒有GG被玩家武器子彈擊中時的傷害判定)
+    this.physics.add.collider(noGG, mgBullets, (obj1, obj2) => { handleNoGGHit(this, obj2, 600, 200, 5); });
+    this.physics.add.collider(noGG, sgBullets, (obj1, obj2) => { handleNoGGHit(this, obj2, 400, 150, 25); });
+    this.physics.add.collider(noGG, snBullets, (obj1, obj2) => { handleNoGGHit(this, obj2, 1500, 500, 50); });
+
+    // 迪克小刀碰撞邏輯 (新增中文註解：迪克小刀碰到地板銷毀，碰到玩家當機即死)
+    this.physics.add.collider(dickKnives, platforms, (knife) => { knife.destroy(); });
+    this.physics.add.overlap(player, dickKnives, triggerCrash);
 
     // 子彈碰撞邏輯
     this.physics.add.collider(mgBullets, platforms);
@@ -251,19 +294,6 @@ function createScene() {
         }
     });
 
-    // 當機畫面 (處理玩家死亡/受傷)
-    let isCrashed = false; // 防止多次觸發當機
-    const triggerCrash = (force = false) => {
-        // 確保 force 真的是布林值 true，因為 Phaser 的 collider 會傳入兩個遊戲物件(Truthy)
-        const isForced = force === true;
-        // 衝刺/護盾期間無敵 (若 isForced 為 true 則無視無敵)，或已當機則跳過
-        if ((playerState.isInvincible && !isForced) || isCrashed) return; 
-        isCrashed = true;
-        playerState.cannotMove = false; // 當機時解決定身狀態，避免復活或重啟時仍被定身 (新增中文註解)
-        showCrashScreen(this); // 委派給 CrashScreen 模組處理 DOM 與動畫
-    };
-    this.triggerCrash = triggerCrash; // 將當機函式掛載到場景，供外部雷射/地刺使用
-
     this.physics.add.collider(player, loli, () => {
         if (bossState.isSuperInvincible || bossState.isExhausted) return; // 究極狂暴與癱瘓模式下，碰到蘿莉不會死掉
         triggerCrash(); // 一般或狂暴模式下，碰到玩家均觸發當機
@@ -290,6 +320,11 @@ function createScene() {
         if (playerState.cannotMove || poopKingState.isCooldown) return;
         // 護盾防禦所有傷害（包含請屎皇身體碰觸），交由 triggerCrash 的 isInvincible 判斷統一處理
         // 不在此消耗護盾：盾牌只有在主動擊退 Boss 時才消耗（createDashShield 的距離判定），讓護盾真正全面防禦 (修改)
+        triggerCrash();
+    });
+    // 碰到我沒有GG也會當機 (碰觸即死) (新增中文註解：玩家碰撞我沒有GG即死判定，加入衝刺無敵與防重複觸發判定)
+    this.physics.add.collider(player, noGG, () => {
+        if (playerState.cannotMove || playerState.isInvincible || playerState.isDashing) return;
         triggerCrash();
     });
     this.physics.add.overlap(player, shockwaves, triggerCrash); // 玩家碰到衝擊波也會當機
@@ -398,6 +433,17 @@ function createScene() {
     }).setOrigin(0.5, 0);
     poopKingHPText.setVisible(false);
 
+    // 我沒有GG血量文字 (初始隱藏，設定血量為 500，顏色為粉紅/紫色) (新增中文註解：建立我沒有GG HP 文字)
+    noGGHPText = this.add.text(width / 2, 100, `我沒有GG血量: 500`, { 
+        fontSize: '30px', 
+        fill: '#ff00ff', // 粉紅/紫色
+        fontStyle: 'bold', 
+        stroke: '#000', 
+        strokeThickness: 4,
+        padding: { left: 10, right: 10, top: 8, bottom: 8 }
+    }).setOrigin(0.5, 0);
+    noGGHPText.setVisible(false);
+
     // 顏王Yeah神聖魔法能量條文字標籤
     yeahEnergyText = this.add.text(width / 2, 140, `神聖魔法能量條`, { 
         fontSize: '18px', 
@@ -457,6 +503,11 @@ function createScene() {
     // 初始化請屎皇攻擊模組參考 (新增中文註解：初始化請屎皇的攻擊模組參考，傳入 poopKingState 以便控制攻擊狀態)
     initPoopKingAttackRefs({ poopKing, player, poopKingHPText, platforms, poopKingState });
 
+    // 初始化我沒有GG狀態機參考 (新增中文註解：初始化我沒有GG的狀態機參考，傳入 dickKnives 以便發射迪克小刀)
+    initNoGGStateRefs({ noGG, player, noGGHPText, platforms, dickKnives, onNoGGDeath: (scene) => {
+        respawnNoGG(scene);
+    }});
+
     // 初始化猥瑣大叔狀態機參考
     initUncleStateRefs({ uncle, uncleHPText, onUncleDeath: (scene) => {
         // 擊敗大叔後在大叔左側出生點直接重生大叔 (不再輪替)
@@ -498,12 +549,14 @@ function createScene() {
         dora.setActive(false); dora.setVisible(false); dora.body.enable = false;
         yeah.setActive(false); yeah.setVisible(false); yeah.body.enable = false;
         poopKing.setActive(false); poopKing.setVisible(false); poopKing.body.enable = false; // 新增 (新增中文註解：在大叔選定時停用請屎皇)
+        noGG.setActive(false); noGG.setVisible(false); noGG.body.enable = false; // 新增我沒有GG 停用 (新增中文註解)
 
         // 隱藏蘿莉 HP，顯示大叔 HP，並直接生成大叔在左側
         showLoliHPText(false);
         uncleHPText.setVisible(true);
         yeahHPText.setVisible(false);
         poopKingHPText.setVisible(false); // 新增
+        noGGHPText.setVisible(false);     // 新增
         const spawnX = width / 4;
         const spawnY = height - 150;
         respawnUncle(this, spawnX, spawnY);
@@ -513,11 +566,13 @@ function createScene() {
         uncle.setActive(false); uncle.setVisible(false); uncle.body.enable = false;
         yeah.setActive(false); yeah.setVisible(false); yeah.body.enable = false;
         poopKing.setActive(false); poopKing.setVisible(false); poopKing.body.enable = false; // 新增 (新增中文註解：在哆啦選定時停用請屎皇)
+        noGG.setActive(false); noGG.setVisible(false); noGG.body.enable = false; // 新增我沒有GG 停用 (新增中文註解)
         
         showLoliHPText(false);
         uncleHPText.setVisible(false);
         yeahHPText.setVisible(false);
         poopKingHPText.setVisible(false); // 新增
+        noGGHPText.setVisible(false);     // 新增
         doraHPText.setVisible(true); // 顯示哆啦噩夢 HP
         
         // 重置領域狀態與重新產生哆啦噩夢
@@ -529,11 +584,13 @@ function createScene() {
         uncle.setActive(false); uncle.setVisible(false); uncle.body.enable = false;
         dora.setActive(false); dora.setVisible(false); dora.body.enable = false;
         poopKing.setActive(false); poopKing.setVisible(false); poopKing.body.enable = false; // 新增 (新增中文註解：在顏王選定時停用請屎皇)
+        noGG.setActive(false); noGG.setVisible(false); noGG.body.enable = false; // 新增我沒有GG 停用 (新增中文註解)
 
         showLoliHPText(false);
         uncleHPText.setVisible(false);
         doraHPText.setVisible(false);
         poopKingHPText.setVisible(false); // 新增
+        noGGHPText.setVisible(false);     // 新增
         yeahHPText.setVisible(true);       // 顯示顏王Yeah HP
         yeahEnergyText.setVisible(true);   // 顯示顏王Yeah 神聖魔法能量條文字
 
@@ -546,11 +603,13 @@ function createScene() {
         uncle.setActive(false); uncle.setVisible(false); uncle.body.enable = false;
         dora.setActive(false); dora.setVisible(false); dora.body.enable = false;
         yeah.setActive(false); yeah.setVisible(false); yeah.body.enable = false;
+        noGG.setActive(false); noGG.setVisible(false); noGG.body.enable = false; // 新增我沒有GG 停用 (新增中文註解)
 
         showLoliHPText(false);
         uncleHPText.setVisible(false);
         doraHPText.setVisible(false);
         yeahHPText.setVisible(false);
+        noGGHPText.setVisible(false);     // 新增
         yeahEnergyText.setVisible(false);
         if (yeahEnergyBar) {
             yeahEnergyBar.clear();
@@ -562,6 +621,33 @@ function createScene() {
         // 重生請屎皇 (新增中文註解：重置並生成請屎皇)
         cleanupPoopKing(this);
         respawnPoopKing(this);
+    } else if (this.selectedBoss === 'noGG') {
+        // 隱藏其它 Boss (新增中文註解：隱藏我沒有GG以外的所有 Boss)
+        loli.setActive(false); loli.setVisible(false); loli.body.enable = false;
+        uncle.setActive(false); uncle.setVisible(false); uncle.body.enable = false;
+        dora.setActive(false); dora.setVisible(false); dora.body.enable = false;
+        yeah.setActive(false); yeah.setVisible(false); yeah.body.enable = false;
+        poopKing.setActive(false); poopKing.setVisible(false); poopKing.body.enable = false;
+
+        showLoliHPText(false);
+        uncleHPText.setVisible(false);
+        doraHPText.setVisible(false);
+        yeahHPText.setVisible(false);
+        poopKingHPText.setVisible(false);
+        yeahEnergyText.setVisible(false);
+        if (yeahEnergyBar) {
+            yeahEnergyBar.clear();
+            yeahEnergyBar.setVisible(false);
+        }
+
+        noGGHPText.setVisible(true); // 顯示我沒有GG HP (新增中文註解)
+
+        // 重置玩家出生點至左側 (width / 4)，避免與中央 (width / 2) 的我沒有GG 重疊撞死 (新增中文註解：設定玩家在左側出生)
+        player.setPosition(width / 4, height - 150);
+
+        // 重生我沒有GG (新增中文註解：重置並生成我沒有GG)
+        cleanupNoGG(this);
+        respawnNoGG(this);
     } else {
         // 預設為蘿莉局：顯示蘿莉 HP，大叔與其它 Boss 保持隱藏與停用
         showLoliHPText(true);
@@ -577,6 +663,8 @@ function createScene() {
         yeah.setActive(false); yeah.setVisible(false); yeah.body.enable = false;
         poopKing.setActive(false); poopKing.setVisible(false); poopKing.body.enable = false;
         poopKingHPText.setVisible(false);
+        noGG.setActive(false); noGG.setVisible(false); noGG.body.enable = false; // 新增我沒有GG 停用 (新增中文註解)
+        noGGHPText.setVisible(false);     // 新增
     }
 }
 
@@ -595,8 +683,8 @@ function updateScene(time, delta) {
         return;
     }
 
-    // 依據當前選定 Boss 決定自動瞄準目標與碰撞對象 (新增中文註解：加入請屎皇到 activeBoss 的判定)
-    const activeBoss = this.selectedBoss === 'uncle' ? uncle : (this.selectedBoss === 'dora' ? dora : (this.selectedBoss === 'yeah' ? yeah : (this.selectedBoss === 'poopKing' ? poopKing : loli)));
+    // 依據當前選定 Boss 決定自動瞄準目標與碰撞對象 (新增中文註解：加入請屎皇與我沒有GG到 activeBoss 的判定)
+    const activeBoss = this.selectedBoss === 'uncle' ? uncle : (this.selectedBoss === 'dora' ? dora : (this.selectedBoss === 'yeah' ? yeah : (this.selectedBoss === 'poopKing' ? poopKing : (this.selectedBoss === 'noGG' ? noGG : loli))));
 
     // 繪製衝刺能量條（委派給 HUD 模組）
     drawEnergyBar(playerState.dashEnergy, playerState.maxDashEnergy, playerState.dashEnergyColor);
@@ -715,6 +803,11 @@ function updateScene(time, delta) {
     // 更新請屎皇邏輯 (新增中文註解：當請屎皇 active 時呼叫其狀態機更新)
     if (poopKing && poopKing.active) {
         updatePoopKingStateMachine(this, time, delta);
+    }
+
+    // 更新我沒有GG邏輯 (新增中文註解：當我沒有GG active 時呼叫其狀態機更新)
+    if (noGG && noGG.active) {
+        updateNoGGStateMachine(this, time, delta);
     }
 }
 
@@ -2328,11 +2421,11 @@ function triggerBossAlignAndExplodeScript(scene) {
     }
 
     // 1. 所有 Boss 出場並排成一排 (站在地板上 height - 110)
-    // 蘿莉 (紫色), 猥瑣大叔 (黑色/暗灰), 哆啦噩夢 (藍色), 顏王Yeah (黃色), 請屎皇 (綠色) (新增中文註解：五位 Boss 進行排排站定位)
+    // 蘿莉 (紫色), 猥瑣大叔 (黑色/暗灰), 哆啦噩夢 (藍色), 顏王Yeah (黃色), 請屎皇 (綠色), 我沒有GG (紫色) (新增中文註解：六位 Boss 進行排排站定位)
     // 修正：必須強制設定 .setDepth(9985) 使其顯示高於白色背景與地板之上！ (新增中文註解：提昇深度至 9985 避免被白色背景與地板遮擋)
     setTimeout(() => {
         if (loli) {
-            loli.setPosition(width * 0.17, height - 110);
+            loli.setPosition(width * 0.14, height - 110);
             loli.setVisible(true).setAlpha(0).setDepth(9985);
             if (loli.body) loli.body.enable = false; // 關閉物理，避免因重力掉落
             scene.tweens.add({ targets: loli, alpha: 1, duration: 400 });
@@ -2341,7 +2434,7 @@ function triggerBossAlignAndExplodeScript(scene) {
 
     setTimeout(() => {
         if (uncle) {
-            uncle.setPosition(width * 0.33, height - 110);
+            uncle.setPosition(width * 0.28, height - 110);
             uncle.setVisible(true).setAlpha(0).setDepth(9985);
             if (uncle.body) uncle.body.enable = false;
             scene.tweens.add({ targets: uncle, alpha: 1, duration: 400 });
@@ -2350,7 +2443,7 @@ function triggerBossAlignAndExplodeScript(scene) {
 
     setTimeout(() => {
         if (dora) {
-            dora.setPosition(width * 0.5, height - 110);
+            dora.setPosition(width * 0.42, height - 110);
             dora.setVisible(true).setAlpha(0).setDepth(9985);
             if (dora.body) dora.body.enable = false;
             scene.tweens.add({ targets: dora, alpha: 1, duration: 400 });
@@ -2359,7 +2452,7 @@ function triggerBossAlignAndExplodeScript(scene) {
 
     setTimeout(() => {
         if (yeah) {
-            yeah.setPosition(width * 0.67, height - 110);
+            yeah.setPosition(width * 0.56, height - 110);
             yeah.setVisible(true).setAlpha(0).setDepth(9985);
             if (yeah.body) yeah.body.enable = false;
             scene.tweens.add({ targets: yeah, alpha: 1, duration: 400 });
@@ -2368,12 +2461,21 @@ function triggerBossAlignAndExplodeScript(scene) {
 
     setTimeout(() => {
         if (poopKing) {
-            poopKing.setPosition(width * 0.83, height - 110);
+            poopKing.setPosition(width * 0.70, height - 110);
             poopKing.setVisible(true).setAlpha(0).setDepth(9985);
             if (poopKing.body) poopKing.body.enable = false;
             scene.tweens.add({ targets: poopKing, alpha: 1, duration: 400 });
         }
     }, 900);
+
+    setTimeout(() => {
+        if (noGG) {
+            noGG.setPosition(width * 0.84, height - 110);
+            noGG.setVisible(true).setAlpha(0).setDepth(9985);
+            if (noGG.body) noGG.body.enable = false;
+            scene.tweens.add({ targets: noGG, alpha: 1, duration: 400 });
+        }
+    }, 1100);
 
     // 2. 獨立 Boss 主題色爆炸輔助函式 (新增中文註解：定義個別 Boss 專屬主題色爆炸粒子與相機閃光函數)
     const triggerIndividualExplosion = (bossSprite, tintColor, flashColor) => {
@@ -2469,10 +2571,16 @@ function triggerBossAlignAndExplodeScript(scene) {
         scene.cameras.main.shake(350, 0.03);
     }, startExplodeTime + 1200);
 
-    // 4. 爆炸完後 1.3 秒，顯現最終感性/鬼畜的字幕與 Alfa-X 作者署名 (新增中文註解：定時觸發最終感性結局字幕)
+    setTimeout(() => {
+        triggerIndividualExplosion(noGG, 0xff00ff, 0xff00ff); // 我沒有GG：粉紅色/紫色自爆 (新增中文註解：我沒有GG紫色粒子自爆)
+        scene.cameras.main.flash(350, 255, 0, 255); // 紫色終結閃光
+        scene.cameras.main.shake(350, 0.03);
+    }, startExplodeTime + 1500);
+
+    // 4. 爆炸完後 1.3 秒，顯現最終感性/鬼畜的字幕與 Alfa-X 作者署名 (新增中文註解：定時觸發最終感性結局字幕，延後至 2800ms)
     setTimeout(() => {
         showFinalEndingCredits(scene);
-    }, startExplodeTime + 2500);
+    }, startExplodeTime + 2800);
 }
 
 /**
@@ -3021,7 +3129,7 @@ function showFinalEndingCredits(scene) {
 }
 
 function createDashShield(scene, player, angle) {
-    const shield = scene.add.graphics(); let hasHitLoli = false; let hasHitUncle = false; let hasHitDora = false; let hasHitYeah = false; let hasHitPoopKing = false; let alive = true;
+    const shield = scene.add.graphics(); let hasHitLoli = false; let hasHitUncle = false; let hasHitDora = false; let hasHitYeah = false; let hasHitPoopKing = false; let hasHitNoGG = false; let alive = true;
     scene.time.delayedCall(1150, () => { alive = false; });
 
     // 儲存護盾參考至場景，以便後續可以被「請屎皇」斬擊立刻擊碎 (新增中文註解：儲存目前護盾參考以便外部調用銷毀)
@@ -3089,6 +3197,25 @@ function createDashShield(scene, player, angle) {
                 handlePoopKingHit(scene, null, 1500, 500, 25, centerX, centerY);
                 hasHitPoopKing = true;
             }
+        }
+        // 護盾碰撞我沒有GG (新增中文註解：護盾碰撞我沒有GG判定，使其可被盾牌攻擊)
+        if (!hasHitNoGG && noGG && noGG.active) {
+            const distNGG = Phaser.Math.Distance.Between(centerX, centerY, noGG.x, noGG.y);
+            if (distNGG < radius + 40) {
+                handleNoGGHit(scene, null, 1500, 500, 25, centerX, centerY);
+                hasHitNoGG = true;
+            }
+        }
+        // 護盾阻擋並銷毀迪克小刀 (新增中文註解：護盾阻擋迪克小刀判定，阻擋彈幕)
+        if (dickKnives && dickKnives.getChildren().length > 0) {
+            dickKnives.getChildren().forEach(knife => {
+                if (knife.active) {
+                    const distK = Phaser.Math.Distance.Between(centerX, centerY, knife.x, knife.y);
+                    if (distK < radius + 30) {
+                        knife.destroy();
+                    }
+                }
+            });
         }
         // 護盾碰撞分身 (分身會受到 25 點傷害)
         if (doraState.clones && doraState.clones.length > 0) {
