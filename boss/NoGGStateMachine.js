@@ -92,12 +92,8 @@ export function triggerCXKDeathQuiz(scene) {
                     }
                 });
 
-                // 徹底重置蔡徐坤狀態：解除爆炸狀態、還原正常尺寸、恢復重力與正常動畫 (新增中文註解：修復停留在中間兩倍大的問題)
-                if (refs.noGG && refs.noGG.active && noGGState.isPhase2) {
-                    noGGState.isExploding = false;
-                    scene.tweens.killTweensOf(refs.noGG); // 停止蔡徐坤身上的一切 Tween
-                    
-                    // 還原為常規尺寸 (1.35x)
+                // 若蔡徐坤當前非處於大爆炸中，確保維持常規尺寸與四圖動畫；若正在大爆炸中則不予中止，繼續執行爆炸蓄力與引爆流程 (新增中文註解)
+                if (refs.noGG && refs.noGG.active && noGGState.isPhase2 && !noGGState.isExploding) {
                     if (refs.loli) {
                         refs.noGG.setDisplaySize(refs.loli.displayWidth * 1.35, refs.loli.displayHeight * 1.35);
                     }
@@ -106,12 +102,7 @@ export function triggerCXKDeathQuiz(scene) {
                         refs.noGG.body.setSize(refs.noGG.width, refs.noGG.height, true);
                     }
                     refs.noGG.setVelocity(0, 0);
-
-                    // 重新啟動四張圖片依序切換動畫
                     startCXKAnimation(scene);
-
-                    // 重新排程下一次 5~7 秒的中分頭爆炸
-                    startCXKExplosionScheduler(scene);
                 }
 
                 // 畫面上彈出金色復活文字 (新增中文註解)
@@ -630,11 +621,7 @@ function executeExplosionBurst(scene, width, height, cx, cy, safeZoneGfx, safeTe
         // 右下角安全區範圍：x >= width - 170 且 y >= height - 200
         const inRightSafeZone = (px >= width - 170 && py >= height - 200);
 
-        // 若處於剛復活的 2 秒無敵狀態，免疫大爆炸，阻止一死再死 (新增中文註解)
-        if (playerState && playerState.isInvincible) {
-            return;
-        }
-
+        // 大爆炸無視玩家復活無敵與衝刺護盾，必須躲入左右下角安全區才可存活 (新增中文註解)
         if (!inLeftSafeZone && !inRightSafeZone) {
             // 不在安全區內：清理安全區繪圖並觸發蔡徐坤死亡問答考驗！(新增中文註解)
             if (safeZoneGfx && safeZoneGfx.active) safeZoneGfx.destroy();
