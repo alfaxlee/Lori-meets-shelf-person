@@ -88,10 +88,20 @@ function preloadAssets() {
     this.load.image('cxk_4', './assets/images/cxk_4.jpg');
     // 載入蔡徐坤中分頭爆炸圖片素材 (新增中文註解：載入中分頭絕招圖片)
     this.load.image('cxk_explode', './assets/images/cxk_explode.jpg');
+    // 載入蔡徐坤被擊敗後 3 張動作圖片與籃球素材 (新增中文註解)
+    this.load.image('cxk_death_1', './assets/images/cxk_death_1.jpg');
+    this.load.image('cxk_death_2', './assets/images/cxk_death_2.jpg');
+    this.load.image('cxk_death_3', './assets/images/cxk_death_3.jpg');
+    this.load.image('basketball', './assets/images/籃球.png');
 
     // 載入北極熊走路 gif 拆解的 16 個影格 (新增中文註解：載入北極熊動畫格)
     for (let i = 0; i < 16; i++) {
         this.load.image(`polar_bear_${i}`, `./assets/images/polar_bear/frame_${i}.png`);
+    }
+
+    // 載入「我看了魔」影片拆解的 111 個影格 (新增中文註解：載入我看了魔逐格動畫素材)
+    for (let i = 0; i < 111; i++) {
+        this.load.image(`cxk_demon_${i}`, `./assets/images/demon_frames/frame_${i}.png`);
     }
 }
 

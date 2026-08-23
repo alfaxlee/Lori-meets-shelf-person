@@ -6,24 +6,53 @@ import { showCXKQuizModal } from '../ui/CXKQuizModal.js';
 import { showCXKEndingScreen } from '../ui/CXKEndingScreen.js';
 import { playerState } from '../player/PlayerController.js';
 
-// 狀態資料 (新增中文註解：定義我沒有GG與蔡徐坤的血量狀態與階段標記)
+// 狀態資料 (新增中文註解：定義我沒有GG與蔡徐坤的血量狀態、階段標記與技能Debuff狀態)
 export const noGGState = {
-    hp: 100,             // 當前血量 (第一階段 100, 第二階段 3000)
-    maxHp: 100,          // 最大血量
-    isPhase2: false,     // 是否進入第二階段「蔡徐坤」
-    isExploding: false,  // 是否正在施放「中分頭爆炸」
-    isQuizActive: false  // 是否正在進行死亡問答考驗
+    hp: 100,                  // 當前血量 (第一階段 100, 第二階段 3000)
+    maxHp: 100,               // 最大血量
+    isPhase2: false,          // 是否進入第二階段「蔡徐坤」
+    isExploding: false,       // 是否正在施放「中分頭爆炸」
+    isDemonActive: false,     // 是否正在施放「我看了魔」
+    isSkillInvincible: false, // 技能期間蔡徐坤是否無敵
+    isDemonDebuffActive: false,// 玩家是否處於傷害砍半狀態
+    isDefeatedSequenceActive: false, // 是否正在進行擊敗後籃球動作流程 (新增中文註解)
+    isQuizActive: false       // 是否正在進行死亡問答考驗
 };
 
 // 共享的遊戲物件參考
 let refs = {};
 let attackTimer = null;    // 發射迪克小刀的定時器 (新增中文註解：迪克小刀攻擊定時器)
 let cxkAnimTimer = null;   // 蔡徐坤圖片切換定時器 (新增中文註解：蔡徐坤動畫定時器)
-let explosionTimer = null; // 中分頭爆炸技能排程定時器 (新增中文註解：中分頭爆炸定時器)
+let skillTimer = null;     // 隨機技能排程定時器 (中分頭爆炸 / 我看了魔) (新增中文註解)
+let explosionTimer = null; // 相容別名定時器
+let demonDebuffTimer = null; // 「我看了魔」Debuff 倒數定時器 (新增中文註解)
+let activeBasketballs = []; // 當前活躍的籃球物件陣列 (新增中文註解)
+let activeBasketballTrails = []; // 當前活躍的籃球殘影陣列 (新增中文註解)
 let cxkFrameIndex = 0;     // 蔡徐坤當前播放影格索引
 
 // 蔡徐坤圖片序列：1 -> 2 -> 3 -> 4 -> 1 -> 2 -> 3 -> 4 (新增中文註解：第四張播完回到第一張重新開始)
 const cxkSequence = ['cxk_1', 'cxk_2', 'cxk_3', 'cxk_4'];
+
+/**
+ * 徹底清除畫面上所有的籃球與殘影物件 (新增中文註解：5秒結束或死亡時立即銷毀全部籃球)
+ */
+export function cleanupAllBasketballs() {
+    if (activeBasketballs && activeBasketballs.length > 0) {
+        activeBasketballs.forEach(b => {
+            if (b) {
+                if (b.body) b.body.enable = false;
+                if (b.destroy) b.destroy();
+            }
+        });
+        activeBasketballs = [];
+    }
+    if (activeBasketballTrails && activeBasketballTrails.length > 0) {
+        activeBasketballTrails.forEach(t => {
+            if (t && t.destroy) t.destroy();
+        });
+        activeBasketballTrails = [];
+    }
+}
 
 /**
  * 初始化狀態機所需的遊戲物件參考 (新增中文註解)
@@ -57,7 +86,16 @@ export function triggerCXKDeathQuiz(scene) {
                 refs.player.setPosition(width / 4, height - 150);
                 refs.player.setVelocity(0, 0);
 
-                // 復活時立即回滿衝刺能量條 (新增中文註解：復活回滿能量)
+                // 若死前處於「我看了魔」Debuff 期間，復活後繼續維持 Debuff 狀態 (上限50且為灰色) (新增中文註解)
+                if (noGGState.isDemonDebuffActive) {
+                    playerState.maxDashEnergy = 50;
+                    playerState.dashEnergyColor = 0x888888;
+                } else {
+                    playerState.maxDashEnergy = 100;
+                    playerState.dashEnergyColor = 0x00ffff;
+                }
+
+                // 復活時立即回滿當前上限的衝刺能量條 (新增中文註解：復活回滿能量)
                 playerState.dashEnergy = playerState.maxDashEnergy;
 
                 // 給予 1 秒無敵狀態，阻止一死再死 (新增中文註解：無敵時間調整為1秒)
@@ -92,8 +130,13 @@ export function triggerCXKDeathQuiz(scene) {
                     }
                 });
 
-                // 若蔡徐坤當前非處於大爆炸中，確保維持常規尺寸與四圖動畫；若正在大爆炸中則不予中止，繼續執行爆炸蓄力與引爆流程 (新增中文註解)
-                if (refs.noGG && refs.noGG.active && noGGState.isPhase2 && !noGGState.isExploding) {
+                // 若死於擊敗後的籃球階段，復活後重新啟動擊敗動作與狂暴籃球躲避挑戰 (新增中文註解)
+                if (noGGState.hp <= 0 && noGGState.isPhase2) {
+                    scene.time.delayedCall(500, () => {
+                        noGGState.isDefeatedSequenceActive = false;
+                        handleNoGGDeath(scene);
+                    });
+                } else if (refs.noGG && refs.noGG.active && noGGState.isPhase2 && !noGGState.isExploding && !noGGState.isDemonActive) {
                     if (refs.loli) {
                         refs.noGG.setDisplaySize(refs.loli.displayWidth * 1.35, refs.loli.displayHeight * 1.35);
                     }
@@ -270,27 +313,210 @@ export function stopCXKAnimation() {
 }
 
 /**
- * 啟動「中分頭爆炸」排程定時器 (新增中文註解：隨機 5~7 秒排程施放中分頭爆炸)
+ * 啟動蔡徐坤隨機技能排程定時器 (新增中文註解：隨機 5~7 秒排程施放「中分頭爆炸」或「我看了魔」)
  */
-export function startCXKExplosionScheduler(scene) {
-    stopCXKExplosionScheduler();
+export function startCXKSkillScheduler(scene) {
+    stopCXKSkillScheduler();
     if (!noGGState.isPhase2) return;
 
     const delay = Phaser.Math.Between(5000, 7000);
-    explosionTimer = scene.time.delayedCall(delay, () => {
-        if (!refs.noGG || !refs.noGG.active || !noGGState.isPhase2 || noGGState.isQuizActive) return;
-        triggerCenterPartExplosion(scene);
+    skillTimer = scene.time.delayedCall(delay, () => {
+        if (!refs.noGG || !refs.noGG.active || !noGGState.isPhase2 || noGGState.isQuizActive || noGGState.isExploding || noGGState.isDemonActive) return;
+        
+        // 5~7秒隨機二選一：50% 中分頭爆炸，50% 我看了魔 (新增中文註解)
+        const isExplosion = Math.random() < 0.5;
+        if (isExplosion) {
+            triggerCenterPartExplosion(scene);
+        } else {
+            triggerDemonSkill(scene);
+        }
     });
 }
 
 /**
- * 停止「中分頭爆炸」排程定時器 (新增中文註解)
+ * 停止蔡徐坤技能排程定時器 (新增中文註解)
  */
-export function stopCXKExplosionScheduler() {
+export function stopCXKSkillScheduler() {
+    if (skillTimer) {
+        skillTimer.remove();
+        skillTimer = null;
+    }
     if (explosionTimer) {
         explosionTimer.remove();
         explosionTimer = null;
     }
+}
+
+// 保持向下相容的別名 (新增中文註解)
+export const startCXKExplosionScheduler = startCXKSkillScheduler;
+export const stopCXKExplosionScheduler = stopCXKSkillScheduler;
+
+/**
+ * 發動「我看了魔」技能 (新增中文註解：播放6秒動畫、蔡徐坤無敵、出現灰色愛心、玩家衝刺能量條砍半變灰、傷害砍半5->2, 25->12, 50->25)
+ */
+function triggerDemonSkill(scene) {
+    if (!refs.noGG || !refs.noGG.active || !noGGState.isPhase2 || noGGState.isQuizActive) return;
+
+    noGGState.isDemonActive = true;
+    noGGState.isSkillInvincible = true; // 技能期間蔡徐坤無敵
+    noGGState.isDemonDebuffActive = true; // 玩家傷害砍半
+
+    stopCXKAnimation(); // 暫停常規換圖與衝刺
+
+    const width = scene.cameras.main.width;
+    const height = scene.cameras.main.height;
+
+    // 1. 玩家衝刺能量條砍半並變為灰色 (Debuff 持續 5 秒) (新增中文註解)
+    playerState.maxDashEnergy = 50;
+    playerState.dashEnergy = Math.min(playerState.dashEnergy, 50);
+    playerState.dashEnergyColor = 0x888888; // 顏色變灰色
+
+    // 2. 畫面上方顯示「💀 我 看 了 魔 💀」暗黑標題與 5 秒 Debuff 提示 (新增中文註解)
+    const demonTitle = scene.add.text(width / 2, 70, "💀 我 看 了 魔 💀", {
+        fontSize: '34px',
+        fill: '#aaaaaa',
+        fontStyle: 'bold',
+        stroke: '#111111',
+        strokeThickness: 6,
+        shadow: { color: '#666666', fill: true, blur: 15 }
+    }).setOrigin(0.5).setDepth(1800);
+
+    const demonSub = scene.add.text(width / 2, 110, "⚡ 衝刺能量減半(灰) · 武器傷害減半（動畫後持續 5 秒）⚡", {
+        fontSize: '18px',
+        fill: '#999999',
+        fontStyle: 'bold',
+        stroke: '#000000',
+        strokeThickness: 4
+    }).setOrigin(0.5).setDepth(1800);
+
+    const titleTween = scene.tweens.add({
+        targets: [demonTitle, demonSub],
+        alpha: 0.65,
+        scale: 1.05,
+        duration: 400,
+        yoyo: true,
+        repeat: -1
+    });
+
+    // 3. 蔡徐坤 3 秒無敵防護罩光環 (新增中文註解：灰色防護光圈)
+    const shieldGfx = scene.add.graphics().setDepth(1200);
+    const updateShield = () => {
+        if (!shieldGfx || !shieldGfx.active || !refs.noGG || !refs.noGG.active) return;
+        shieldGfx.clear();
+        shieldGfx.lineStyle(4, 0xaaaaaa, 0.85);
+        shieldGfx.strokeCircle(refs.noGG.x, refs.noGG.y, 80);
+        shieldGfx.lineStyle(2, 0xffffff, 0.6);
+        shieldGfx.strokeCircle(refs.noGG.x, refs.noGG.y, 90);
+    };
+
+    // 4. 特效：愛心從蔡徐坤中間擴散出來然後淡出 (新增中文註解：從蔡徐坤中心向外擴散並淡出的灰色愛心)
+    const emitExpandingHeart = (delayMs = 0) => {
+        scene.time.delayedCall(delayMs, () => {
+            if (!refs.noGG || !refs.noGG.active) return;
+            const heartContainer = scene.add.container(refs.noGG.x, refs.noGG.y).setDepth(1400);
+            const heartGfx = scene.add.graphics();
+            heartGfx.fillStyle(0x777777, 0.7);
+            heartGfx.lineStyle(4, 0xdddddd, 0.95);
+
+            // 繪製心形
+            heartGfx.fillCircle(-14, -10, 18);
+            heartGfx.strokeCircle(-14, -10, 18);
+            heartGfx.fillCircle(14, -10, 18);
+            heartGfx.strokeCircle(14, -10, 18);
+            heartGfx.fillTriangle(-30, -5, 30, -5, 0, 30);
+            heartGfx.lineBetween(-30, -5, 0, 30);
+            heartGfx.lineBetween(30, -5, 0, 30);
+            heartGfx.fillRect(-20, -10, 40, 18);
+
+            heartContainer.add(heartGfx);
+            heartContainer.setScale(0.4);
+            heartContainer.setAlpha(0.95);
+
+            // 從蔡徐坤中間不斷擴散放大並漸變淡出 (新增中文註解)
+            scene.tweens.add({
+                targets: heartContainer,
+                scaleX: 7.0,
+                scaleY: 7.0,
+                alpha: 0,
+                duration: 1600,
+                ease: 'Cubic.easeOut',
+                onComplete: () => { heartContainer.destroy(); }
+            });
+        });
+    };
+
+    // 在技能期間發射多波從中心擴散淡出的灰色愛心 (新增中文註解)
+    emitExpandingHeart(0);
+    emitExpandingHeart(600);
+    emitExpandingHeart(1300);
+    emitExpandingHeart(2000);
+
+    // 5. 3 秒逐格動畫播放 (新增中文註解：播放 111 張逐格影格，播放 3 秒)
+    let demonFrameIndex = 0;
+    const totalFrames = 111;
+    const frameDelay = 3000 / totalFrames; // 約 27ms 每幀
+    const demonAnimTimer = scene.time.addEvent({
+        delay: frameDelay,
+        repeat: totalFrames - 1, // 執行 111 次
+        callback: () => {
+            if (!refs.noGG || !refs.noGG.active || !noGGState.isDemonActive) return;
+            
+            const frameKey = `cxk_demon_${demonFrameIndex}`;
+            if (scene.textures.exists(frameKey)) {
+                refs.noGG.setTexture(frameKey);
+                if (refs.loli) {
+                    refs.noGG.setDisplaySize(refs.loli.displayWidth * 1.6, refs.loli.displayHeight * 1.35);
+                }
+                if (refs.noGG.body) {
+                    refs.noGG.body.setSize(refs.noGG.width, refs.noGG.height, true);
+                }
+            } else {
+                refs.noGG.setTexture(cxkSequence[demonFrameIndex % cxkSequence.length]);
+                refs.noGG.setTint(0x888888);
+            }
+
+            demonFrameIndex = (demonFrameIndex + 1) % totalFrames;
+            updateShield();
+        }
+    });
+
+    // 6. 3 秒結束：蔡徐坤解除無敵，恢復常態四圖循環與衝刺 (新增中文註解)
+    scene.time.delayedCall(3000, () => {
+        noGGState.isDemonActive = false;
+        noGGState.isSkillInvincible = false; // 蔡徐坤 3 秒無敵結束
+        shieldGfx.destroy();
+        demonAnimTimer.remove();
+
+        if (refs.noGG && refs.noGG.active && noGGState.isPhase2) {
+            refs.noGG.clearTint();
+            if (refs.loli) {
+                refs.noGG.setDisplaySize(refs.loli.displayWidth * 1.35, refs.loli.displayHeight * 1.35);
+            }
+            // 恢復正常四圖循環動畫與衝刺
+            startCXKAnimation(scene);
+            // 重新排程下一次 5~7 秒隨機技能 (中分頭爆炸 / 我看了魔)
+            startCXKSkillScheduler(scene);
+        }
+    });
+
+    // 7. 動畫播完後再持續 5 秒（總計 8 秒）：玩家攻擊傷害與衝刺能量條 Debuff 徹底還原 (新增中文註解：動畫結束後5秒)
+    if (demonDebuffTimer) {
+        demonDebuffTimer.remove();
+        demonDebuffTimer = null;
+    }
+    demonDebuffTimer = scene.time.delayedCall(8000, () => {
+        noGGState.isDemonDebuffActive = false; // 解除玩家傷害砍半
+
+        // 還原玩家衝刺能量上限與顏色 (新增中文註解)
+        playerState.maxDashEnergy = 100;
+        playerState.dashEnergyColor = 0x00ffff;
+
+        // 清理 Debuff UI 標題
+        if (titleTween) titleTween.stop();
+        demonTitle.destroy();
+        demonSub.destroy();
+        demonDebuffTimer = null;
+    });
 }
 
 /**
@@ -702,13 +928,16 @@ function shootDickKnife(scene) {
 }
 
 /**
- * 進入第二階段「蔡徐坤」 (新增中文註解：第一階段血量歸零後變身為第二階段蔡徐坤，設定姬姬長度3000km，設為堅硬石頭剛體，啟動中分頭爆炸排程)
+ * 進入第二階段「蔡徐坤」 (新增中文註解：第一階段血量歸零後變身為第二階段蔡徐坤，設定姬姬長度3000km，設為堅硬石頭剛體，啟動隨機技能排程)
  */
 export function enterPhase2CXK(scene) {
     noGGState.isPhase2 = true;
-    noGGState.hp = 2000;
-    noGGState.maxHp = 2000;
+    noGGState.hp = 3000;
+    noGGState.maxHp = 3000;
     noGGState.isExploding = false;
+    noGGState.isDemonActive = false;
+    noGGState.isSkillInvincible = false;
+    noGGState.isDemonDebuffActive = false;
 
     // 變身特效：金黃色全螢幕閃光與震動 (新增中文註解：播放變身特效)
     scene.cameras.main.flash(600, 255, 215, 0);
@@ -735,12 +964,12 @@ export function enterPhase2CXK(scene) {
     // 啟動蔡徐坤四張圖片循環換圖與衝刺喊話動畫 (新增中文註解)
     startCXKAnimation(scene);
 
-    // 啟動中分頭爆炸絕招定時排程 (新增中文註解：隨機 5~7 秒施放中分頭爆炸)
-    startCXKExplosionScheduler(scene);
+    // 啟動蔡徐坤隨機技能定時排程 (新增中文註解：隨機 5~7 秒施放「中分頭爆炸」或「我看了魔」)
+    startCXKSkillScheduler(scene);
 }
 
 /**
- * 處理我沒有GG / 蔡徐坤 受到的傷害 (新增中文註解：處理受擊傷害、階段判定、姬姬長度更新與受傷反饋)
+ * 處理我沒有GG / 蔡徐坤 受到的傷害 (新增中文註解：處理受擊傷害、技能無敵免疫、傷害砍半Debuff、階段判定、姬姬長度更新與受傷反饋)
  */
 export function handleNoGGHit(scene, bullet, force, stunTime, damage, originX, originY) {
     // 檢查 Sprite 是否存在且處於 active 狀態
@@ -749,13 +978,38 @@ export function handleNoGGHit(scene, bullet, force, stunTime, damage, originX, o
         return;
     }
 
+    // 技能無敵期間（例如「我看了魔」6秒期間），完全免疫子彈傷害 (新增中文註解)
+    if (noGGState.isSkillInvincible) {
+        if (bullet) bullet.destroy();
+        const immuneNotice = scene.add.text(refs.noGG.x, refs.noGG.y - 45, "🛡️ 無敵", {
+            fontSize: '18px', fill: '#cccccc', fontStyle: 'bold', stroke: '#000', strokeThickness: 3
+        }).setOrigin(0.5).setDepth(1600);
+        scene.tweens.add({
+            targets: immuneNotice,
+            y: refs.noGG.y - 75,
+            alpha: 0,
+            duration: 350,
+            onComplete: () => { immuneNotice.destroy(); }
+        });
+        return;
+    }
+
+    // 計算實際傷害：若處於「我看了魔」Debuff 弱化期間，傷害砍半 (5->2, 25->12, 50->25) (新增中文註解)
+    let actualDamage = damage;
+    if (noGGState.isDemonDebuffActive) {
+        if (damage === 5) actualDamage = 2;
+        else if (damage === 25) actualDamage = 12;
+        else if (damage === 50) actualDamage = 25;
+        else actualDamage = Math.max(1, Math.floor(damage / 2));
+    }
+
     // 計算受擊方向角度
     const srcX = bullet ? bullet.x : (originX ?? refs.noGG.x - 1);
     const srcY = bullet ? bullet.y : (originY ?? refs.noGG.y);
     const angle = Phaser.Math.Angle.Between(srcX, srcY, refs.noGG.x, refs.noGG.y);
 
     // 扣除血量 (km 當作純數值扣除) (新增中文註解)
-    noGGState.hp -= damage;
+    noGGState.hp -= actualDamage;
     if (refs.noGGHPText) {
         if (noGGState.isPhase2) {
             refs.noGGHPText.setText(`姬姬長度：${noGGState.hp}km`);
@@ -780,7 +1034,7 @@ export function handleNoGGHit(scene, bullet, force, stunTime, damage, originX, o
         }
         refs.noGG.setTint(0xff0000);
         scene.time.delayedCall(150, () => {
-            if (refs.noGG && refs.noGG.active) refs.noGG.clearTint();
+            if (refs.noGG && refs.noGG.active && !noGGState.isDemonActive) refs.noGG.clearTint();
         });
         scene.cameras.main.shake(100, 0.005);
     }
@@ -792,18 +1046,177 @@ export function handleNoGGHit(scene, bullet, force, stunTime, damage, originX, o
  * 處理第二階段蔡徐坤最終死亡通關 (新增中文註解：播放金光並觸發黑色通關推薦歌曲畫面)
  */
 export function handleNoGGDeath(scene) {
-    // 隱藏並禁用物理本體
-    refs.noGG.setActive(false).setVisible(false).body.enable = false;
-    scene.cameras.main.flash(600, 255, 215, 0); // 播放金光閃爍
+    if (noGGState.isDefeatedSequenceActive) return;
+    noGGState.isDefeatedSequenceActive = true;
 
     stopCXKAnimation();
-    stopCXKExplosionScheduler();
+    stopCXKSkillScheduler();
     stopNoGGAttacks();
-    cleanupNoGG(scene);
 
-    // 延遲 500ms 進入黑色背景推薦歌曲通關畫面 (新增中文註解：觸發結尾畫面)
-    scene.time.delayedCall(500, () => {
-        showCXKEndingScreen(scene);
+    const width = scene.cameras.main.width;
+    const height = scene.cameras.main.height;
+
+    // 禁用蔡徐坤物理碰撞，定在空中或地面播放動作 (新增中文註解)
+    if (refs.noGG && refs.noGG.body) {
+        refs.noGG.body.setVelocity(0, 0);
+        refs.noGG.body.allowGravity = false;
+        refs.noGG.body.enable = false;
+    }
+
+    // 播放擊敗金色閃光與震動 (新增中文註解)
+    scene.cameras.main.flash(500, 255, 215, 0);
+    scene.cameras.main.shake(300, 0.015);
+
+    // 1. 依序播放 3 張動作圖片（每張 1 秒 = 1000ms）(新增中文註解)
+    // 第 1 張動作圖 (0 ~ 1000ms)
+    refs.noGG.setTexture('cxk_death_1');
+    if (refs.loli) {
+        refs.noGG.setDisplaySize(refs.loli.displayWidth * 1.5, refs.loli.displayHeight * 1.5);
+    }
+
+    // 第 2 張動作圖 (1000ms ~ 2000ms)
+    scene.time.delayedCall(1000, () => {
+        if (!refs.noGG || !refs.noGG.active) return;
+        refs.noGG.setTexture('cxk_death_2');
+        if (refs.loli) {
+            refs.noGG.setDisplaySize(refs.loli.displayWidth * 1.5, refs.loli.displayHeight * 1.5);
+        }
+    });
+
+    // 第 3 張動作圖 (2000ms ~ 3000ms)
+    scene.time.delayedCall(2000, () => {
+        if (!refs.noGG || !refs.noGG.active) return;
+        refs.noGG.setTexture('cxk_death_3');
+        if (refs.loli) {
+            refs.noGG.setDisplaySize(refs.loli.displayWidth * 1.5, refs.loli.displayHeight * 1.5);
+        }
+    });
+
+    // 2. 3 秒後丟出瘋狂彈跳籃球，玩家必須瘋狂躲避 5 秒 (無視盾牌防禦) (新增中文註解)
+    scene.time.delayedCall(3000, () => {
+        if (!refs.noGG || !refs.noGG.active) return;
+
+        // 隱藏蔡徐坤本體
+        refs.noGG.setVisible(false);
+
+        // 建立狂暴彈跳籃球物理精靈 (新增中文註解)
+        const startX = refs.noGG.x;
+        const startY = refs.noGG.y;
+        const basketball = scene.physics.add.sprite(startX, startY, 'basketball');
+        basketball.setDisplaySize(80, 80);
+        basketball.setDepth(2000);
+        basketball.setCollideWorldBounds(true);
+        basketball.setBounce(1, 1); // 完美彈性碰撞
+        activeBasketballs.push(basketball);
+
+        // 隨機初始極速對角發射 (速度 1400)
+        const initAngle = Phaser.Math.FloatBetween(-Math.PI * 0.8, -Math.PI * 0.2);
+        const ballSpeed = 1400;
+        basketball.setVelocity(Math.cos(initAngle) * ballSpeed, Math.sin(initAngle) * ballSpeed);
+
+        // 籃球旋轉動畫 (新增中文註解)
+        const ballSpinTween = scene.tweens.add({
+            targets: basketball,
+            angle: 360,
+            duration: 350,
+            repeat: -1
+        });
+
+        // 籃球火焰/光芒殘影粒子 (新增中文註解)
+        const trailTimer = scene.time.addEvent({
+            delay: 40,
+            repeat: 125, // 5 秒內生成
+            callback: () => {
+                if (!basketball || !basketball.active) return;
+                const trail = scene.add.sprite(basketball.x, basketball.y, 'basketball');
+                trail.setDisplaySize(70, 70);
+                trail.setAlpha(0.5);
+                trail.setTint(0xffaa00);
+                trail.setDepth(1990);
+                activeBasketballTrails.push(trail);
+                scene.tweens.add({
+                    targets: trail,
+                    alpha: 0,
+                    scaleX: 0.2,
+                    scaleY: 0.2,
+                    duration: 250,
+                    onComplete: () => { 
+                        const idx = activeBasketballTrails.indexOf(trail);
+                        if (idx !== -1) activeBasketballTrails.splice(idx, 1);
+                        trail.destroy(); 
+                    }
+                });
+            }
+        });
+
+        // 頂部 5 秒躲避警示橫幅與倒數 (新增中文註解)
+        let dodgeCountdown = 5;
+        const dodgeText = scene.add.text(width / 2, 75, `🏀 瘋狂躲避籃球！剩餘 ${dodgeCountdown} 秒 🏀`, {
+            fontSize: '30px',
+            fill: '#ffaa00',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 6,
+            shadow: { color: '#ff6600', fill: true, blur: 15 }
+        }).setOrigin(0.5).setDepth(2500);
+
+        const dodgeSub = scene.add.text(width / 2, 115, "⚠️ 籃球無視盾牌！被擊中直接當機，無法復活！⚠️", {
+            fontSize: '18px',
+            fill: '#ff3333',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5).setDepth(2500);
+
+        const countdownTimer = scene.time.addEvent({
+            delay: 1000,
+            repeat: 4,
+            callback: () => {
+                dodgeCountdown--;
+                if (dodgeText && dodgeText.active) {
+                    dodgeText.setText(`🏀 瘋狂躲避籃球！剩餘 ${dodgeCountdown} 秒 🏀`);
+                }
+            }
+        });
+
+        // 籃球與玩家的致命碰撞偵測 (無視任何盾牌或無敵狀態，被籃球擊中無法復活直接當機) (新增中文註解)
+        let hasHitPlayer = false;
+        const ballCollider = scene.physics.add.overlap(refs.player, basketball, () => {
+            if (hasHitPlayer) return;
+            hasHitPlayer = true;
+
+            // 清理籃球與定時器 (新增中文註解)
+            if (ballCollider) scene.physics.world.removeCollider(ballCollider);
+            if (ballSpinTween) ballSpinTween.stop();
+            if (trailTimer) trailTimer.remove();
+            if (countdownTimer) countdownTimer.remove();
+            dodgeText.destroy();
+            dodgeSub.destroy();
+            cleanupAllBasketballs();
+
+            // 被籃球打到不能復活，直接觸發藍屏當機 (新增中文註解：無法復活直接當機)
+            if (scene.triggerCrash) {
+                scene.triggerCrash(true);
+            }
+        });
+
+        // 5 秒成功躲避結束流程 (新增中文註解：5秒結束後立刻清除所有籃球並進入通關畫面)
+        scene.time.delayedCall(5000, () => {
+            if (hasHitPlayer) return; // 若已被擊中則不觸發成功
+
+            // 立刻清除所有籃球、定時器與殘影 (新增中文註解：立即清空所有籃球)
+            if (ballCollider) scene.physics.world.removeCollider(ballCollider);
+            if (ballSpinTween) ballSpinTween.stop();
+            if (trailTimer) trailTimer.remove();
+            if (countdownTimer) countdownTimer.remove();
+            if (dodgeText && dodgeText.active) dodgeText.destroy();
+            if (dodgeSub && dodgeSub.active) dodgeSub.destroy();
+            cleanupAllBasketballs(); // 立刻徹底清除所有籃球
+
+            // 清理 Boss 狀態並進入通關結尾畫面 (新增中文註解)
+            cleanupNoGG(scene);
+            showCXKEndingScreen(scene);
+        });
     });
 }
 
@@ -874,17 +1287,32 @@ export function updateNoGGStateMachine(scene, time, delta) {
 }
 
 /**
- * 清理我沒有GG 狀態 (新增中文註解)
+ * 清理我沒有GG 狀態 (新增中文註解：清理所有計時器並重置 Debuff)
  */
 export function cleanupNoGG(scene) {
     stopCXKAnimation();
-    stopCXKExplosionScheduler();
+    stopCXKSkillScheduler();
     stopNoGGAttacks();
     noGGState.isQuizActive = false;
+    noGGState.isExploding = false;
+    noGGState.isDemonActive = false;
+    noGGState.isSkillInvincible = false;
+    noGGState.isDemonDebuffActive = false;
+
+    // 還原玩家衝刺能量上限與顏色 (新增中文註解)
+    if (demonDebuffTimer) {
+        demonDebuffTimer.remove();
+        demonDebuffTimer = null;
+    }
+    playerState.maxDashEnergy = 100;
+    playerState.dashEnergyColor = 0x00ffff;
+
     if (refs.noGG) {
         refs.noGG.clearTint();
     }
     if (refs.dickKnives) {
         refs.dickKnives.clear(true, true);
     }
+    // 清除所有可能殘留的籃球與殘影 (新增中文註解)
+    cleanupAllBasketballs();
 }
