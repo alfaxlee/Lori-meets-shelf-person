@@ -28,15 +28,20 @@ let explosionTimer = null; // 相容別名定時器
 let demonDebuffTimer = null; // 「我看了魔」Debuff 倒數定時器 (新增中文註解)
 let activeBasketballs = []; // 當前活躍的籃球物件陣列 (新增中文註解)
 let activeBasketballTrails = []; // 當前活躍的籃球殘影陣列 (新增中文註解)
+let basketballWorldBoundsHandler = null; // 籃球邊界碰撞偏差監聽器 (新增中文註解)
 let cxkFrameIndex = 0;     // 蔡徐坤當前播放影格索引
 
 // 蔡徐坤圖片序列：1 -> 2 -> 3 -> 4 -> 1 -> 2 -> 3 -> 4 (新增中文註解：第四張播完回到第一張重新開始)
 const cxkSequence = ['cxk_1', 'cxk_2', 'cxk_3', 'cxk_4'];
 
 /**
- * 徹底清除畫面上所有的籃球與殘影物件 (新增中文註解：5秒結束或死亡時立即銷毀全部籃球)
+ * 徹底清除畫面上所有的籃球與殘影物件 (新增中文註解：5秒結束或死亡時立即銷毀全部籃球並解除碰撞監聽)
  */
-export function cleanupAllBasketballs() {
+export function cleanupAllBasketballs(scene) {
+    if (scene && scene.physics && scene.physics.world && basketballWorldBoundsHandler) {
+        scene.physics.world.off('worldbounds', basketballWorldBoundsHandler);
+        basketballWorldBoundsHandler = null;
+    }
     if (activeBasketballs && activeBasketballs.length > 0) {
         activeBasketballs.forEach(b => {
             if (b) {
@@ -1106,26 +1111,48 @@ export function handleNoGGDeath(scene) {
         basketball.setDisplaySize(80, 80);
         basketball.setDepth(2000);
         basketball.setCollideWorldBounds(true);
+        basketball.body.onWorldBounds = true; // 啟用邊界碰撞事件 (新增中文註解)
         basketball.setBounce(1, 1); // 完美彈性碰撞
         activeBasketballs.push(basketball);
 
-        // 隨機初始極速對角發射 (速度 1400)
-        const initAngle = Phaser.Math.FloatBetween(-Math.PI * 0.8, -Math.PI * 0.2);
-        const ballSpeed = 1400;
+        // 每次投擲完全隨機 360 度初始方向 (新增中文註解：隨機投擲角度)
+        const initAngle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const ballSpeed = 1900; // 球速更快 (提升至 1900) (新增中文註解)
         basketball.setVelocity(Math.cos(initAngle) * ballSpeed, Math.sin(initAngle) * ballSpeed);
+
+        // 監聽世界邊界反彈事件：撞牆時注入隨機偏差角度，破壞單調的 90 度鏡面反彈 (新增中文註解)
+        if (basketballWorldBoundsHandler && scene.physics && scene.physics.world) {
+            scene.physics.world.off('worldbounds', basketballWorldBoundsHandler);
+        }
+        basketballWorldBoundsHandler = (body) => {
+            if (body && body.gameObject === basketball && basketball.active) {
+                // 獲取反彈後的運動方向
+                const currentVx = basketball.body.velocity.x;
+                const currentVy = basketball.body.velocity.y;
+                let currentAngle = Math.atan2(currentVy, currentVx);
+                
+                // 加入 ±20度 ~ ±45度 (約 ±0.35 ~ 0.78 弧度) 的隨機偏差量 (新增中文註解)
+                const angleDeviation = Phaser.Math.FloatBetween(0.35, 0.78) * (Math.random() < 0.5 ? 1 : -1);
+                currentAngle += angleDeviation;
+                
+                // 重新賦予偏差後的極速速度 (新增中文註解)
+                basketball.setVelocity(Math.cos(currentAngle) * ballSpeed, Math.sin(currentAngle) * ballSpeed);
+            }
+        };
+        scene.physics.world.on('worldbounds', basketballWorldBoundsHandler);
 
         // 籃球旋轉動畫 (新增中文註解)
         const ballSpinTween = scene.tweens.add({
             targets: basketball,
             angle: 360,
-            duration: 350,
+            duration: 250, // 旋轉速度配合球速加快
             repeat: -1
         });
 
         // 籃球火焰/光芒殘影粒子 (新增中文註解)
         const trailTimer = scene.time.addEvent({
-            delay: 40,
-            repeat: 125, // 5 秒內生成
+            delay: 30, // 殘影生成更密集
+            repeat: 165, // 5 秒內生成
             callback: () => {
                 if (!basketball || !basketball.active) return;
                 const trail = scene.add.sprite(basketball.x, basketball.y, 'basketball');
@@ -1139,7 +1166,7 @@ export function handleNoGGDeath(scene) {
                     alpha: 0,
                     scaleX: 0.2,
                     scaleY: 0.2,
-                    duration: 250,
+                    duration: 200,
                     onComplete: () => { 
                         const idx = activeBasketballTrails.indexOf(trail);
                         if (idx !== -1) activeBasketballTrails.splice(idx, 1);
@@ -1151,7 +1178,7 @@ export function handleNoGGDeath(scene) {
 
         // 頂部 5 秒躲避警示橫幅與倒數 (新增中文註解)
         let dodgeCountdown = 5;
-        const dodgeText = scene.add.text(width / 2, 75, `🏀 瘋狂躲避籃球！剩餘 ${dodgeCountdown} 秒 🏀`, {
+        const dodgeText = scene.add.text(width / 2, 75, `🏀 瘋狂躲避狂暴籃球！剩餘 ${dodgeCountdown} 秒 🏀`, {
             fontSize: '30px',
             fill: '#ffaa00',
             fontStyle: 'bold',
@@ -1174,7 +1201,7 @@ export function handleNoGGDeath(scene) {
             callback: () => {
                 dodgeCountdown--;
                 if (dodgeText && dodgeText.active) {
-                    dodgeText.setText(`🏀 瘋狂躲避籃球！剩餘 ${dodgeCountdown} 秒 🏀`);
+                    dodgeText.setText(`🏀 瘋狂躲避狂暴籃球！剩餘 ${dodgeCountdown} 秒 🏀`);
                 }
             }
         });
@@ -1192,7 +1219,7 @@ export function handleNoGGDeath(scene) {
             if (countdownTimer) countdownTimer.remove();
             dodgeText.destroy();
             dodgeSub.destroy();
-            cleanupAllBasketballs();
+            cleanupAllBasketballs(scene);
 
             // 被籃球打到不能復活，直接觸發藍屏當機 (新增中文註解：無法復活直接當機)
             if (scene.triggerCrash) {
@@ -1211,7 +1238,7 @@ export function handleNoGGDeath(scene) {
             if (countdownTimer) countdownTimer.remove();
             if (dodgeText && dodgeText.active) dodgeText.destroy();
             if (dodgeSub && dodgeSub.active) dodgeSub.destroy();
-            cleanupAllBasketballs(); // 立刻徹底清除所有籃球
+            cleanupAllBasketballs(scene); // 立刻徹底清除所有籃球並移除監聽
 
             // 清理 Boss 狀態並進入通關結尾畫面 (新增中文註解)
             cleanupNoGG(scene);
@@ -1314,5 +1341,5 @@ export function cleanupNoGG(scene) {
         refs.dickKnives.clear(true, true);
     }
     // 清除所有可能殘留的籃球與殘影 (新增中文註解)
-    cleanupAllBasketballs();
+    cleanupAllBasketballs(scene);
 }
