@@ -11,12 +11,12 @@ Caesar Cipher, move with the number now that all kids are saying😏😏
 ---
 
 > 一款以 **Phaser 3** 製作的 2D 橫向 Boss Rush 射擊遊戲。
-<!-- 新增中文註解：更新遊戲簡介，加入六個 Boss 的說明 -->
-> 玩家需要使用三種武器打倒「蘿莉」、「猥瑣大叔」、「哆啦噩夢」、「顏王Yeah」、「請屎皇」或「我沒有GG」Boss，並躲避越來越兇猛的攻擊。
+<!-- 新增中文註解：更新遊戲簡介，加入七個 Boss 的說明 -->
+> 玩家需要使用三種武器打倒「蘿莉」、「猥瑣大叔」、「哆啦噩夢」、「顏王Yeah」、「請屎皇」、「我沒有GG / 蔡徐坤」或「大猩猩（無敵大猩猩）」Boss，並躲避越來越兇猛的攻擊。
 
 ---
 
-<!-- 新增中文註解：將每一個 Boss 個別寫入目錄，點擊可直接滑動跳轉，並拿掉 Boss行為與狀態機 標題 -->
+<!-- 新增中文註解：將每一個 Boss 個別寫入目錄，點擊可直接滑動跳轉 -->
 ## 目錄
 
 - [遊玩方式](#遊玩方式)
@@ -27,7 +27,7 @@ Caesar Cipher, move with the number now that all kids are saying😏😏
 - [顏王 Yeah Boss（HP: 1000）](#顏王-yeah-bosshp-1000)
 - [請屎皇 Boss（HP: 500）](#請屎皇-bosshp-500)
 - [我沒有GG / 蔡徐坤 Boss](#我沒有gg-boss第一階段-hp-100--第二階段蔡徐坤-姬姬長度-3000km)
-- [大猩猩 Boss（HP: 200）](#大猩猩-bosshp-300)
+- [大猩猩 Boss（一階段 HP: 200 / 二階段 HP: 888 / 三階段 狂暴超載 HP: ？？？）](#大猩猩-boss一階段-hp-200--二階段-hp-888--三階段-狂暴超載-hp-)
 - [武器系統](#武器系統)
 - [特殊機制](#特殊機制)
 - [技術棧](#技術棧)
@@ -47,7 +47,7 @@ Caesar Cipher, move with the number now that all kids are saying😏😏
 | `W` | 跳躍（落地時才能跳） |
 | `A` | 向左移動 |
 | `D` | 向右移動 |
-| `Q` | **衝刺**（朝滑鼠方向，帶無敵） |
+| `Q` | **衝刺**（朝滑鼠方向，帶無敵與傷害護盾） |
 | 滑鼠左鍵 | 發射彈弓（MG） |
 | 滑鼠右鍵 | 發射霰彈槍（SG） |
 | 滑鼠中鍵 | 發射狙擊槍（SN） |
@@ -68,12 +68,12 @@ Caesar Cipher, move with the number now that all kids are saying😏😏
 
 - **左上角**：彈弓彈藥量（黃色），衝刺能量條（青色）
 - **右上角**：霰彈槍彈藥量（綠色）
-- **上方中間**：狙擊槍彈藥量（青色），Boss 血量（紅色）
+- **上方中間**：狙擊槍彈藥量（青色），Boss 血量（紅色/特殊色）
 
 ---
 
 ### 單獨 Boss 挑戰模式
-遊戲啟動後玩家需在選單選擇要挑戰的 Boss，系統僅會加載選定的 Boss 進行關卡，並在該 Boss 被擊敗後 **3 秒重生同一個 Boss**，不再進行原本的關卡輪替。
+遊戲啟動後玩家可在主選單選擇要挑戰的 Boss，系統僅會加載選定的 Boss 進行關卡，並在該 Boss 被擊敗後 **3 秒重生同一個 Boss**，不再進行原本的關卡輪替。
 
 ### 蘿莉 Boss（HP: 600）
 
@@ -202,7 +202,6 @@ HP 降至 200 以下時觸發過載模式，大叔進入強化型態。
 
 ---
 
-<!-- 新增中文註解：在 README.md 中新增哆啦噩夢 Boss 說明 -->
 ### 哆啦噩夢 Boss（HP: 400）
 
 哆啦噩夢體型普通，具備獨特的領域展開能力，善於逃跑並使用遠程大威力武器壓制玩家。
@@ -252,7 +251,6 @@ HP 降至 200 以下時觸發過載模式，大叔進入強化型態。
 
 ---
 
-<!-- 新增中文註解：在 README.md 中新增顏王 Yeah Boss 說明 -->
 ### 顏王 Yeah Boss（HP: 1000）
 
 顏王 Yeah 擁有極高的血量與獨特的神聖魔法能量機制，不具備常規招式，但玩家必須透過收集能量球來應對其必殺絕招。
@@ -276,9 +274,8 @@ HP 降至 200 以下時觸發過載模式，大叔進入強化型態。
   - **必殺過程**：
     1. **凍結世界**：世界靜止，玩家與 Boss 凍結移動，玩家進入無敵狀態，清空場上剩餘的球。
     2. **祈禱文字**：畫面淡入為全黑，並在正中央以極大金黃色字體逐行顯示五句祈禱文（最後一行為特大金色光暈字「顏值崩壞」並特寫放大 1.5 倍）。
-    3. **神聖光束**：黑幕與文字淡出，天降金色巨型魔法陣光束持續轟擊 4 秒，隨後彈出選擇畫面，提供「當機」與「死亡」兩個按鈕給玩家。<!-- 新增中文註解：更正為彈出死亡與當機選擇畫面 -->
+    3. **神聖光束**：黑幕與文字淡出，天降金色巨型魔法陣光束持續轟擊 4 秒，隨後彈出選擇畫面，提供「當機」與「死亡」兩個按鈕給玩家。
 
-<!-- 新增中文註解：已移除顏王隱藏彩蛋明文，保持其僅以密文形式出現在 README 頂端 -->
 #### HP 閾值事件
 
 | HP | 事件 |
@@ -294,7 +291,6 @@ HP 降至 200 以下時觸發過載模式，大叔進入強化型態。
 
 ---
 
-<!-- 新增中文註解：在 README.md 中詳細擴充請屎皇 Boss 的完整說明 -->
 ### 請屎皇 Boss（HP: 500）
 
 選定請屎皇關卡後，請屎皇於畫面登場。體型魁梧，擁有綠色斬擊、三槍連刺等招式，並在血量低於 200 時騎乘北極熊進入騎士型態。
@@ -348,7 +344,6 @@ HP 降至 200 以下時觸發北極熊騎士型態。
 
 ---
 
-<!-- 新增中文註解：在 README.md 中最新更新我沒有GG / 蔡徐坤 Boss 說明 -->
 ### 我沒有GG Boss（第一階段 HP: 100 / 第二階段「蔡徐坤」 姬姬長度: 3000km）
 
 Boss「我沒有GG」第一階段為原地發射迪克小刀的戰渣，被擊敗後會進入第二階段變身為「蔡徐坤」，外觀由 4 張圖片由上往下循環切換（第四張播完回到第一張重新開始），血量顯示為「姬姬長度：3000km」，並會在第 3、4 張高速衝向玩家喊出「雞你太美」。
@@ -423,26 +418,43 @@ Boss「我沒有GG」第一階段為原地發射迪克小刀的戰渣，被擊�
 
 ---
 
+### 大猩猩 Boss（一階段 HP: 200 / 二階段 HP: 888 / 三階段 狂暴超載 HP: ？？？）
 
-
-### 大猩猩 Boss（一階段 HP: 200 / 二階段 HP: 888）
-
-新登場 Boss「大猩猩」（無敵大猩猩），初始血量 200，第一階段展開超高頻率瘋狂跳躍與地表巨型震波；當一階段血量歸零時，觸發史詩級**第二階段變身過場動畫**。
+新登場 Boss「大猩猩」（無敵大猩猩），共有三個階段，結合了高空翻滾躍擊、常駐黑色高壓電流、超廣雙手協同拍地與毀滅光束、以及擊敗後血量變為「？？？」的 10 秒全螢幕旋轉死光狂暴模式！
 
 #### 階段與機制
 
 - **第一階段（HP: 200）**：
   - **瘋狂跳躍**：120ms 極速預警 → 480ms 超高空 550~750px 巨幅拋物線翻滾躍擊 → 落地超大震波 → 80~150ms 喘息後立刻連跳
   - **超大落地震波**：落地向左、右兩側高速發射 260x120 且擴散 2.2 倍的超巨型土褐色地表衝擊波（shockwaves），玩家觸碰即死
-- **第二模式防禦狀態（二階 HP: 888，過場期間玩家定身）**：
-  - 一階段 HP 歸零時，玩家被定身且取消重力
-  - 大猩猩平滑升至螢幕正中央的上方
-  - 兩隻由純黑色方塊構成的短巨手從螢幕兩側伸出：純黑方塊鏈條由轉動空格間隔分段（無特殊裝飾關節），手臂加粗為厚重多排方塊結構（粗壯不細長），全方位密集的黑色高壓電流特效（包含大猩猩與雙肩多重分叉電弧、邊界肘關節跳躍電弧、腕關節電弧與防護方塊交織電弧，極具科技壓迫感），分為三段結構（上臂斜至邊界肘部、前臂折向內下、手腕連厚重爪掌），關節處帶有動態轉動微動擺動。實體黑方塊手臂肢體（上臂方塊段、前臂段、手掌手指爪）與大猩猩防護盾具有精確實體碰撞箱（黑色高壓電流部分純為遠端視覺效果不算碰撞箱）：玩家在未開盾狀態下碰觸黑方塊肢體引發當機；若在開盾狀態下碰觸則如撞到堅硬岩石般被實體推開並反彈（產生金屬岩石火花與鏡頭震動），無法穿透且不受傷，長度適中留出中央廣闊戰場。玩家碰觸巨手任何部位即判定撞擊引發當機
-  - 45 顆黑方塊從全螢幕四面八方飛來將大猩猩嚴密包圍並環繞旋轉
-  - 血量變身為 **888**，全螢幕暗黑爆發，解除玩家定身。目前第二模式大猩猩維持懸浮於螢幕上方不跳躍，周圍黑方塊防禦環與巨手會吸收並消滅玩家的所有子彈，處於無法攻擊階段
-- **受擊判定**：支援彈弓（5）、霰彈槍（25）、狙擊槍（50）扣血反饋
-- **碰觸判定**：玩家碰撞大猩猩本體即死引發當機
-- **隱藏衝刺增益**：對戰大猩猩時，玩家衝刺能量條回復速度 2 倍快，衝刺耗能減半（1/2），無任何額外視覺提示
+- **第二階段（HP: 888）—— 雙手協同組合攻擊與常駐黑色電流**：
+  - 一階段 HP 歸零時，大猩猩平滑升至螢幕上方，45 顆黑方塊環繞旋轉包圍形成防護環，左右兩側伸出純黑方塊粗壯巨手，並爆發強烈科技質感的常駐黑色高壓電流。
+  - **雙手協同攻擊（無視盾牌）**：
+    - **拍地（Slam）+ 掌心光束（Laser）**：一隻手進行超大範圍拍地（覆蓋至全螢幕邊緣防止卡角老六，空間小塞不下立刻壓死），另一隻手發射超粗黑紫毀滅光束！
+    - **攻擊節奏**：0.7 秒蓄力預警 → 110ms 極速猛砸/光束爆發 → 200ms 地面停留 → 120ms 極速向上拉起復位 → 150~280ms 緊湊間隔連發！
+    - **無視盾牌判定**：拍地重壓與毀滅光束皆強制無視玩家衝刺盾牌與無敵狀態，擊中直接當機。
+  - **4 秒破防虛弱期（Vulnerability Phase）**：
+    - 重複五次雙手協同攻擊後，大猩猩所有黑方塊手臂、防護環與電流全部消失，大猩猩懸浮空中進入整整 **4 秒金色破防虛弱期**，玩家可全力開火扣血！
+    - 4 秒結束後，環繞方塊立刻聚攏回來，雙手從左右兩側飛入，到位後爆發黑色高壓電流，等電流完全顯現後才開啟下一輪五連擊。
+- **第三階段（狂暴超載模式 HP: ？？？ / 10 秒旋轉死光 + 終極雷電大爆炸）**：
+  - **開啟條件**：第二階段血量歸零後觸發，血量文字更新為紅色閃爍的「大猩猩血量: ？？？」，大猩猩移至中央啟動核心超載。
+  - **中央電流圓圈 + 5 道旋轉死光**：
+    - 起始角度自動避開玩家確保位於安全空隙正中央（附 600ms 預警充電緩衝），死光以走路即可跟上的慢速平穩旋轉。
+    - **智慧反轉與路徑鎖定**：當死光逼近玩家至臨界空間（距離 `< 85px` 且正朝玩家靠攏）或邊界受壓時，**必定立刻強制往回反轉**；反轉後死光鎖定方向遠離玩家持續行走完整大跨度路徑（至少 4.5 秒），徹底杜絕在邊界來回抽搐卡住的問題！
+    - **中途隨機轉向**：在空間極其寬裕的安全中途，有機率自然再度轉向，增添動態趣味。
+    - **無視盾牌**：死光射線與中央電流圓圈無視盾牌，碰觸即死。
+  - **全螢幕華麗雷電大爆炸（開盾存活）**：
+    - 10 秒死光旋轉結束後，大猩猩能量強烈收縮蓄力 850ms，頂部提示「⚠️ 終極全螢幕雷電爆轟！立刻開盾！」。
+    - 隨後引爆全螢幕華麗雷電大衝擊波與黑色電弧群：**只要玩家在此時處於開盾狀態（Dash Shield）即可成功存活！若未開盾則直接被炸死！**
+    - 終極爆炸結束後，大猩猩徹底毀滅死亡通關！
+
+#### 受擊機制
+
+| 項目 | 說明 |
+|------|------|
+| 受擊扣血 | 支援彈弓（5）、霰彈槍（25）、狙擊槍（50）扣血反饋 |
+| 碰觸本體 | 玩家碰撞大猩猩本體即死引發當機 |
+| 隱藏衝刺增益 | 對戰大猩猩時，玩家衝刺能量條回復速度 2 倍快，衝刺耗能減半（1/2） |
 
 ---
 
@@ -468,7 +480,7 @@ Boss「我沒有GG」第一階段為原地發射迪克小刀的戰渣，被擊�
 遊戲畫面採用適應性比例縮放策略，固定邏輯高度為 `720`，寬高比則根據瀏覽器視窗自動向兩側延伸計算（至少 `1280`）。此做法能讓遊戲在任何裝置上均完美滿版，且所有角色、武器與子彈皆維持原始等比例（不會變扁或變胖），只將左右空間與地板向外拉長。
 
 ### 全域文字防截斷修復 (Text Padding)
-為遊戲中所有 HUD 文字（大標題、選卡標題、角色名字、子彈數、Boss 血量文字等）加上適當的 `padding` 內距緩衝。此舉徹底修復了 Phaser 在部分平台或粗描邊（stroke）下造成字頂與邊緣被 Canvas 邊界截斷遮蓋的排版缺陷。
+為遊戲中所有 HUD 文字（大標題、選卡標題、角色名字、子彈數、Boss 血量文字等）加上適當的 `padding` 內距緩衝。徹底修復了 Phaser 在部分平台或粗描邊（stroke）下造成字頂與邊緣被 Canvas 邊界截斷遮蓋的排版缺陷。
 
 ### 當機機制（BSOD）轉場重構
 - 玩家被擊中當機後，畫面的進度條會在 **3 秒** 內從 0% 跑至 100%。
@@ -510,25 +522,33 @@ curseforge/
 │       └── uncleOverloadBg.webp # 猥瑣大叔過載模式背景圖 (本地資源)
 ├── scenes/
 │   ├── MainMenuScene.js    # 主選單與 Boss 選擇場景 (金色高質感動態界面)
-│   └── GameScene.js        # 主遊戲場景（協調所有模組）
+│   └── GameScene.js        # 主遊戲場景（協調所有 Boss 模組與戰鬥邏輯）
 ├── player/
-│   ├── PlayerController.js # 玩家移動、衝刺與無敵邏輯
+│   ├── PlayerController.js # 玩家移動、衝刺、能量條與無敵邏輯
 │   └── DashEffects.js      # 衝刺粉塵視覺效果
 ├── boss/
-│   ├── LoliStateMachine.js # 蘿莉 Boss AI 狀態機（HP、狀態切換、傷害處理）
-│   ├── LoliAttacks.js      # 蘿莉 Boss 攻擊實作（衝擊波、雷射、彈跳球、跳躍攻擊）
-│   ├── UncleStateMachine.js# 猥瑣大叔狀態機（HP、一般/過載模式切換、AI 移動）
-│   ├── UncleAttacks.js     # 猥瑣大叔攻擊系統（大槌、地刺、黑球衝刺、超級地刺、超級刺球）
-│   ├── DoraStateMachine.js  # 哆啦噩夢狀態機（HP、領域展開、真領域展開過場、分身召喚） (新增中文註解：加入哆啦狀態機)
-│   ├── DoraAttacks.js       # 哆啦噩夢攻擊實作（狙擊雷射、火箭筒、瞬移太陽球） (新增中文註解：加入哆啦攻擊)
-│   ├── YeahStateMachine.js  # 顏王Yeah狀態機（HP、連續跳躍AI、黃色能量球生成與收集） (新增中文註解：加入顏王狀態機)
-│   └── YeahAttacks.js       # 顏王Yeah攻擊實作（結構佔位符） (新增中文註解：加入顏王攻擊)
+│   ├── LoliStateMachine.js     # 蘿莉 Boss AI 狀態機（HP、狀態切換、傷害處理）
+│   ├── LoliAttacks.js          # 蘿莉 Boss 攻擊實作（衝擊波、雷射、彈跳球、跳躍攻擊）
+│   ├── UncleStateMachine.js    # 猥瑣大叔狀態機（HP、一般/過載模式切換、AI 移動）
+│   ├── UncleAttacks.js         # 猥瑣大叔攻擊系統（大槌、地刺、黑球衝刺、超級地刺、超級刺球）
+│   ├── DoraStateMachine.js     # 哆啦噩夢狀態機（HP、領域展開、真領域展開過場、分身召喚）
+│   ├── DoraAttacks.js          # 哆啦噩夢攻擊實作（狙擊雷射、火箭筒、瞬移太陽球）
+│   ├── YeahStateMachine.js     # 顏王Yeah狀態機（HP、連續跳躍AI、黃色能量球生成與收集）
+│   ├── YeahAttacks.js          # 顏王Yeah攻擊實作（結構佔位符）
+│   ├── PoopKingStateMachine.js # 請屎皇狀態機（HP、北極熊騎士切換、剛體抵抗、喘息期）
+│   ├── PoopKingAttacks.js      # 請屎皇攻擊系統（綠色斬擊、三槍連刺、騎士連段）
+│   ├── NoGGStateMachine.js     # 我沒有GG / 蔡徐坤狀態機（HP、變身、問答考驗、防穿地保護）
+│   ├── NoGGAttacks.js          # 我沒有GG / 蔡徐坤攻擊實作（小刀、唱跳衝刺、中分頭爆炸、我看了魔、狂暴籃球）
+│   ├── GorillaStateMachine.js  # 大猩猩狀態機（HP、二階黑方塊手臂肢體物理、三階狂暴超載切換）
+│   └── GorillaAttacks.js       # 大猩猩攻擊實作（落地震波、拍地+光束、4秒破防、旋轉死光、雷電大爆炸）
 ├── weapons/
 │   └── WeaponManager.js    # 三把武器的彈藥、射擊、換彈邏輯
 └── ui/
-    ├── HUD.js              # Boss 血量文字 + 玩家衝刺能量條
+    ├── HUD.js              # Boss 血量文字 + 玩家衝刺能量條繪製
     ├── MobileControls.js   # 手機觸控搖桿與按鈕
-    └── CrashScreen.js      # 玩家死亡時的 BSOD 藍屏動畫
+    ├── CrashScreen.js      # 玩家死亡時的 BSOD 藍屏動畫
+    ├── CXKQuizModal.js     # 蔡徐坤死亡神祕三道問答考驗彈窗
+    └── CXKEndingScreen.js  # 蔡徐坤擊敗後的推薦歌曲與通關畫面
 ```
 
 ---
@@ -541,76 +561,60 @@ curseforge/
 
 ### `scenes/MainMenuScene.js`
 - **主選單**：金色漸變發光大標題、金色動態粒子背景、Glassmorphism 金色描邊按鈕。
-- **Boss 選擇**：展示等比例頭像選卡，提供單獨 Boss 重生戰鬥模式的選擇。
+- **Boss 選擇**：展示等比例頭像選卡，提供 7 個單獨 Boss 戰鬥模式的選擇。
 
 ### `readme.html`
 - 利用 Marked.js 與 GitHub Markdown CSS 動態載入並編譯 `README.md`，提供玩家高質感的說明網頁直觀檢視。
 
 ### `scenes/GameScene.js`
-- 遊戲主場景，實作 `preload()` / `create()` / `update()` 三階段
-- **分支加載**：在 `init` 階段接收選定 Boss。若為大叔局，則完全隱藏並關閉蘿莉（包含其雷射/海嘯/彈跳球計時器）。
-- **重複重生**：大叔或蘿莉被擊敗後 3 秒，重生同一個 Boss，不再自動進行輪替。
+- 遊戲主場景，實作 `preload()` / `create()` / `update()` 三階段。
+- **分支加載**：在 `init` 階段接收選定 Boss，依據選擇載入對應的 Boss 與攻擊模組，並在擊敗後 3 秒自動重生。
 
 ### `player/PlayerController.js`
-- 維護 `playerState`（衝刺能量、衝刺冷卻、無敵狀態）
-- `updatePlayer()`：每幀處理 WASD 移動 + Q 衝刺
-- 衝刺時短暫關閉重力、進入無敵、播放粉塵特效
+- 維護 `playerState`（衝刺能量、衝刺冷卻、無敵狀態、能量顏色等）。
+- `updatePlayer()`：每幀處理 WASD 移動 + Q 衝刺，衝刺時短暫關閉重力、進入無敵、生成衝刺傷害護盾。
 
 ### `player/DashEffects.js`
-- `createDashDust()`：產生 32 顆往衝刺反方向散射的粉塵粒子
+- `createDashDust()`：產生 32 顆往衝刺反方向散射的粉塵粒子。
 
-### `boss/LoliStateMachine.js`
-- 維護 `bossState`（hp、isBerserk、isUltimateBerserk、isSuperInvincible、isExhausted 等）
-- `handleLoliHit()`：處理 Boss 受傷、擊退、特殊 HP 閾值觸發
-- `updateLoliStateMachine()`：每幀依狀態決定 Boss 行為（追逐 / 狂暴飄移 / 無敵飛行 / 癱瘓靜止）
-- HP 降至 **150** 以下觸發狂暴模式
-- HP 降至 **50** 以下觸發超級無敵 → 究極狂暴模式
+### `boss/LoliStateMachine.js` & `boss/LoliAttacks.js`
+- 蘿莉 Boss 狀態機與攻擊實作（垂直雷射、衝擊波、彈跳球、跳躍攻擊、究極狂暴四砲台雷射、海嘯）。
 
-### `boss/LoliAttacks.js`
-- 所有蘿莉 Boss 攻擊的具體實作，透過 `initAttackRefs()` 注入共享物件
-- 攻擊種類：垂直雷射、衝擊波、彈跳球、跳躍攻擊、究極模式四砲台雷射、究極雷射、海嘯
+### `boss/UncleStateMachine.js` & `boss/UncleAttacks.js`
+- 猥瑣大叔狀態機與攻擊系統（大槌攻擊、召喚地刺、黑球衝刺、過載模式超級地刺、超級刺球、三角形導彈）。
 
-### `boss/UncleStateMachine.js`
-- 猥瑣大叔的狀態管理模組，維護 `uncleState` 全域狀態物件
-- `handleUncleHit()`：處理受傷、擊退、HP 閾值觸發（< 200 時進入過載模式）
-- `enterOverloadMode()`：進入過載模式的完整流程（切換為本地 `uncleOverloadBg.webp` 背景、隱藏原 Sprite、建立黑暗實體容器）
-- `updateUncleStateMachine()`：每幀更新 AI 移動（一般模式地面追蹤 / 過載模式漂浮跟隨）
-- `respawnUncle()`：重置大叔的所有狀態與碰撞箱，並清理過載背景
+### `boss/DoraStateMachine.js` & `boss/DoraAttacks.js`
+- 哆啦噩夢狀態機與攻擊系統（逃跑 AI、領域展開減速、真領域展開過場、雙分身召喚、狙擊雷射、火箭筒、瞬移太陽球）。
 
-### `boss/UncleAttacks.js`
-- 猥瑣大叔 Boss 的所有攻擊實作
-- **一般模式攻擊**：大槌攻擊、召喚地刺、黑球衝刺
-- **過載模式攻擊**：超級地刺、超級刺球、三角形導彈（自帶 2px 白色描邊，在暗色背景下更容易被玩家看清）
+### `boss/YeahStateMachine.js` & `boss/YeahAttacks.js`
+- 顏王 Yeah 狀態機與攻擊系統（連續高跳鬼畜 AI、定時生成 8 顆黃色能量球、神聖魔法必殺過場）。
 
-<!-- 新增中文註解：在模組說明中新增哆啦噩夢與顏王Yeah的檔案說明 -->
-### `boss/DoraStateMachine.js`
-- 控制哆啦噩夢「避開玩家逃跑」的移動 AI 與跳躍避險邏輯。
-- 負責領域展開（全螢幕藍色減速渲染）與真領域展開（HP ≤ 125 時召喚 2 個帶血條分身一同戰鬥）。
+### `boss/PoopKingStateMachine.js` & `boss/PoopKingAttacks.js`
+- 請屎皇狀態機與攻擊系統（高抵抗剛體、綠色斬擊、三槍連刺、北極熊騎士型態、玩家 10 連衝爆發、5 秒冰藍色喘息期）。
 
-### `boss/DoraAttacks.js`
-- 哆啦噩夢的所有招式實作（狙擊雷射、火箭筒、瞬移太陽球）與每 2 秒發動一次的攻擊排程器。
+### `boss/NoGGStateMachine.js` & `boss/NoGGAttacks.js`
+- 我沒有GG / 蔡徐坤狀態機與攻擊系統（一階迪克小刀、二階四圖循環唱跳衝刺「雞你太美」、中分頭大爆炸無視盾牌、我看了魔 3 秒無敵與 Debuff、狂暴彈跳籃球 5 秒挑戰、神秘死亡問答）。
 
-### `boss/YeahStateMachine.js`
-- 負責顏王Yeah 的血量、受傷/死亡、以及「空中才能水平移動」的蹦跳追捕 AI。
-- 負責每 0.5 秒隨機在畫面上定點生成 3 顆黃色能量球。
-
-### `boss/YeahAttacks.js`
-- 顏王Yeah 攻擊模組的結構佔位符。
+### `boss/GorillaStateMachine.js` & `boss/GorillaAttacks.js`
+- 大猩猩狀態機與攻擊系統（一階拋物線翻滾連跳與地表震波；二階黑方塊手臂肢體物理、常駐黑色高壓電流、雙手協同超大拍地+光束直達邊緣、4 秒破防虛弱期；三階狂暴超載 HP: ？？？ 旋轉死光慢速走位避難、防抽搐平穩路徑、全螢幕華麗雷電大爆炸開盾存活）。
 
 ### `weapons/WeaponManager.js`
-- 維護三把武器的彈藥量、射速、換彈時間
-- `fireMG` / `fireSG` / `fireSN`：各武器的射擊實作
-- `triggerReload()`：執行換彈（彈藥空時自動觸發）
+- 維護彈弓、霰彈槍、狙擊槍三把武器的彈藥、射擊、音效與換彈邏輯。
 
 ### `ui/HUD.js`
-- 顯示 Boss 血量文字（畫面正上方中間，已加上 padding 防止描邊截斷）
-- 每幀繪製玩家衝刺能量條（左上角）
+- 繪製頂部 Boss 血量條/長度文字（帶 padding 防截斷）與左上角玩家衝刺能量條。
 
 ### `ui/MobileControls.js`
-- 偵測手機裝置建立虛擬搖桿與動作按鈕，並在視窗縮放時自動重新定位控制項。
+- 偵測手機裝置建立虛擬搖桿與按鈕，自動適應視窗縮放。
 
 ### `ui/CrashScreen.js`
-- 玩家死亡時觸發 3 秒修復動畫、0.5秒後文字全數隱藏、強迫全螢幕一次、轉至彩色電視畫面。
+- 玩家死亡時觸發 3 秒修復動畫、文字隱藏、強迫全螢幕一次、轉至彩色電視畫面。
+
+### `ui/CXKQuizModal.js`
+- 蔡徐坤二階段死亡時彈出的神秘打字機三道問答考驗彈窗。
+
+### `ui/CXKEndingScreen.js`
+- 擊敗蔡徐坤並成功躲過籃球後的推薦歌曲列表與 246 秒通關畫面。
 
 ---
 
@@ -644,136 +648,86 @@ python -m http.server 8080
 ```
 main.js
 └── scenes/GameScene.js
-    ├── ui/MobileControls.js    （mobileInput 共享物件）
+    ├── ui/MobileControls.js
     ├── ui/CrashScreen.js
     ├── ui/HUD.js
+    ├── ui/CXKQuizModal.js
+    ├── ui/CXKEndingScreen.js
     ├── weapons/WeaponManager.js
     ├── player/DashEffects.js
     ├── player/PlayerController.js
-    │   ├── ui/MobileControls.js
-    │   └── ui/HUD.js
-    ├── boss/LoliStateMachine.js
-    │   ├── ui/HUD.js
-    │   ├── player/PlayerController.js
-    │   └── boss/LoliAttacks.js    （部分 import，注意循環依賴）
-    ├── boss/LoliAttacks.js
-    │   └── boss/LoliStateMachine.js   （只 import bossState）
-    ├── boss/UncleStateMachine.js
-    │   └── boss/UncleAttacks.js       （import 攻擊啟停與清理函式）
-    ├── boss/UncleAttacks.js
-    │   └── boss/UncleStateMachine.js  （只 import uncleState）
-    ├── boss/DoraStateMachine.js       （新增中文註解：加入哆啦噩夢依賴關係）
-    │   ├── boss/DoraAttacks.js
-    │   └── ui/HUD.js
-    ├── boss/DoraAttacks.js
-    │   └── boss/DoraStateMachine.js
-    ├── boss/YeahStateMachine.js       （新增中文註解：加入顏王Yeah依賴關係）
-    │   └── scenes/GameScene.js        （呼叫 triggerHolyCinematic 必殺動畫）
-    └── boss/YeahAttacks.js
+    ├── boss/LoliStateMachine.js <-> boss/LoliAttacks.js
+    ├── boss/UncleStateMachine.js <-> boss/UncleAttacks.js
+    ├── boss/DoraStateMachine.js <-> boss/DoraAttacks.js
+    ├── boss/YeahStateMachine.js <-> boss/YeahAttacks.js
+    ├── boss/PoopKingStateMachine.js <-> boss/PoopKingAttacks.js
+    ├── boss/NoGGStateMachine.js <-> boss/NoGGAttacks.js
+    └── boss/GorillaStateMachine.js <-> boss/GorillaAttacks.js
 ```
-
-> ⚠️ `LoliAttacks.js` 與 `LoliStateMachine.js` 之間存在**部分循環引用**。
-> `LoliAttacks` 只 import `bossState`（純資料物件），
-> `LoliStateMachine` import `LoliAttacks` 的函式。
-> 避免循環依賴的方式是透過 `initAttackRefs()` / `initBossRefs()` 在 `create` 階段注入物件參考，而非直接 import。
-
-> ⚠️ `UncleAttacks.js` 與 `UncleStateMachine.js` 之間也存在**部分循環引用**。
-> `UncleAttacks` 只 import `uncleState`（純資料物件），
-> `UncleStateMachine` import `UncleAttacks` 的攻擊啟停與清理函式。
-> 同樣透過 `initUncleRefs()` / `initUncleStateRefs()` 注入共享參考。
 
 ### 共享物件注入模式
 
-四個 Boss 模組均使用 `refs` 模式：
+全專案 7 個 Boss 模組均嚴格遵循 `refs` 注入模式，避免 ES Module 循環引用：
 
 ```js
 let refs = {};
 export function initXxxRefs(gameRefs) { refs = gameRefs; }
-// 之後的函式皆透過 refs.loli、refs.player、refs.lasers 等存取
 ```
 
-在 `GameScene.create()` 中必須同時呼叫：
+在 `GameScene.create()` 中統一完成注入：
 
 ```js
 initAttackRefs({ loli, player, shockwaves, lasers, enemyBalls });
 initBossRefs({ loli, player, lasers, enemyBalls, shockwaves, onLoliDeath });
 initUncleRefs({ uncle, uncleHPText, onUncleDeath, player, mgBullets, sgBullets, snBullets });
 initUncleStateRefs({ uncle, uncleHPText, onUncleDeath, player });
-initDoraStateRefs({ dora, player, doraHPText, clone1HPText, clone2HPText, platforms, mgBullets, sgBullets, snBullets, onDoraDeath }); // 新增中文註解：注入哆啦狀態參考
-initDoraAttackRefs({ dora, player, doraHPText, clone1HPText, clone2HPText, platforms }); // 新增中文註解：注入哆啦攻擊參考
-initYeahStateRefs({ yeah, yeahHPText, yeahEnergyBar, yeahEnergyBalls, onYeahDeath }); // 新增中文註解：注入顏王狀態參考
+initDoraStateRefs({ dora, player, doraHPText, clone1HPText, clone2HPText, platforms, mgBullets, sgBullets, snBullets, onDoraDeath });
+initDoraAttackRefs({ dora, player, doraHPText, clone1HPText, clone2HPText, platforms });
+initYeahStateRefs({ yeah, yeahHPText, yeahEnergyBar, yeahEnergyBalls, onYeahDeath });
+initPoopKingStateRefs({ poopKing, player, poopKingHPText, platforms, onPoopKingDeath });
+initPoopKingAttackRefs({ poopKing, player, poopKingHPText, platforms, poopKingState });
+initNoGGStateRefs({ noGG, player, noGGHPText, platforms, dickKnives, loli, onNoGGDeath });
+initNoGGAttackRefs({ noGG, player, noGGHPText, platforms, dickKnives, loli });
+initGorillaStateRefs({ gorilla, player, gorillaHPText, platforms, shockwaves, onGorillaDeath, triggerCrash });
+initGorillaAttackRefs({ gorilla, player, gorillaHPText, platforms, shockwaves, triggerCrash });
 ```
-
-### 物理群組
-
-| 群組變數 | 內容 | 說明 |
-|----------|------|------|
-| `mgBullets` | 彈弓子彈 | 反彈，碰牆消失，碰地刺消失 |
-| `sgBullets` | 霰彈子彈 | 不受重力，碰牆消失，碰地刺消失 |
-| `snBullets` | 狙擊子彈 | 碰地板消失，碰地刺消失 |
-| `shockwaves` | 衝擊波 | 碰牆消失 |
-| `lasers` | 雷射/海嘯等 | body.enable = false（僅碰撞偵測用） |
-| `enemyBalls` | 彈跳球 | 碰地板反彈，碰天花板/牆消失 |
-| `yeahEnergyBalls` | 顏王黃色能量球 | 碰玩家消失，累積 8 顆觸發神聖魔法必殺 (新增中文註解：物理群組表格加入能量球) |
 
 ### 編碼規則
 
-- **所有新增程式碼請加上中文註解**（`GEMINI.md` 規定）
-- 圖片素材放在 `assets/images/` 目錄
-- 新功能請以獨立函式（或新模組）實作，再透過 `initXxxRefs` 注入，避免循環引用
-- 手機觸控控制透過 `mobileInput` 物件傳遞，不要直接存取 DOM 事件
+- **所有新增程式碼必須加上繁體中文註解**（`GEMINI.md` 規定）。
+- **每一個 Boss 都必須拆分為 `Attacks.js` 與 `StateMachine.js`**（`GEMINI.md` 規定）。
+- 圖片素材放在 `assets/images/` 目錄。
+- 新功能請以獨立函式（或新模組）實作，再透過 `initXxxRefs` 注入，避免循環引用。
+- 手機觸控控制透過 `mobileInput` 物件傳遞，不要直接存取 DOM 事件。
 
-### 遊戲物件 URL 說明
+### 狀態旗標速查
 
-- 玩家圖片：從 YouTube 頭像 URL 遠端載入（`胖嘟嘟發電機`）
-- 地板圖片：從 Bing 圖片 URL 遠端載入（`地板`）
-- 猥瑣大叔圖片：從 Bing 圖片 URL 遠端載入（`猥瑣大叔`）
-- 其餘素材：本地 `assets/images/` 目錄
-
-### bossState 狀態旗標速查（蘿莉）
-
-| 旗標 | 觸發條件 | 效果 |
-|------|----------|------|
-| `isBerserk` | HP < 150 | 狂暴模式開始，兩側砲台出現 |
-| `isSuperInvincible` | HP 降至 50 | Boss 飛向中央，無法受傷 |
-| `isUltimateBerserk` | 超級無敵完成縮放後 | 四砲台+彈跳球+隨機雷射 |
-| `isExhausted` | 究極模式 7 秒後 | Boss 倒地，玩家打完剩餘 HP |
-| `isHit` | 受到傷害時 | 擊退動畫硬直 |
-| `isScaling` | 超級無敵放大時 | 防止多次觸發放大動畫 |
-
-### uncleState 狀態旗標速查（猥瑣大叔）
-
+#### `gorillaState` 狀態旗標速查（大猩猩）
 | 旗標 | 說明 |
 |------|------|
-| `isAttacking` | 正在執行攻擊（大槌、地刺、黑球衝刺或過載攻擊），期間停止移動 |
-| `isHit` | 受擊硬直中，擊退力減半（過載模式下再減半） |
-| `isOverload` | 是否處於過載模式（HP < 200 時觸發） |
-| `overloadContainer` | 過載模式的一體化視覺容器（Container） |
-| `overloadLimbs` | 過載模式的四肢引用 `{ armL_Group, armR_Group }` |
-| `moveSpeedMultiplier` | 移動速度倍率（過載模式為 1.5） |
-| `attackQueue` | 攻擊佇列陣列，儲存待執行的攻擊類型 |
-| `hammer` | 當前大槌 Graphics 物件參考 |
-| `spikes` | 當前所有地刺物件陣列 |
+| `isPhase2` | 是否處於第二階段（黑方塊防護環、粗壯雙手、常駐黑色高壓電流） |
+| `isFinalPhase` | 是否處於第三階段（狂暴超載模式 HP: ？？？、5 道旋轉死光、雷電大爆炸） |
+| `isVulnerable` | 是否處於二階 4 秒破防虛弱期（懸浮空中受擊扣血） |
+| `isLightningActive`| 是否激發常駐黑色高壓電流 |
+| `isTransforming` | 是否處於一階到二階的變身過場中 |
+| `slamState` | 拍地攻擊狀態 `{ active, hand, targetX, warnLeft, warnRight, phase, progress, isCrushing }` |
+| `laserState` | 掌心光束狀態 `{ active, hand, targetX, targetY, phase, isFiring }` |
 
-<!-- 新增中文註解：在注意事項新增哆啦與顏王的狀態旗標速查表格 -->
-### doraState 狀態旗標速查（哆啦噩夢）
-
+#### `noGGState` 狀態旗標速查（我沒有GG / 蔡徐坤）
 | 旗標 | 說明 |
 |------|------|
-| `isDomainExpanded` | 是否已展開一般領域（登場 0.5 秒後自動啟動，玩家/子彈/重力速度減半） |
-| `isTrueDomain` | 是否處於真領域展開狀態（HP ≤ 125 時啟動） |
-| `isTrueDomainTransition` | 是否處於真領域展開的過場動畫（此時無敵、全螢幕靜止） |
-| `isHit` | 是否處於受擊硬直中（會閃紅與後退） |
-| `clones` | 儲存 2 個真領域召喚分身 `{ clone1, clone2 }` 的物理 Sprite 與狀態引用 |
+| `isPhase2` | 是否處於第二階段蔡徐坤（姬姬長度: 3000km） |
+| `isExploding` | 是否正在施放中分頭大爆炸 |
+| `isDemonActive` | 是否正在施放「我看了魔」技能（3秒無敵動畫） |
+| `isSkillInvincible` | 技能期間蔡徐坤是否無敵 |
+| `isDemonDebuffActive` | 玩家是否處於傷害砍半與衝刺能量減半(灰) Debuff 狀態 |
+| `isDefeatedSequenceActive` | 是否正在播放 3 秒死亡動作與 5 秒狂暴籃球挑戰 |
+| `isQuizActive` | 是否正在進行死亡神秘打字機三道問答考驗 |
 
-### yeahState 狀態旗標速查（顏王Yeah）
-
+#### `poopKingState` 狀態旗標速查（請屎皇）
 | 旗標 | 說明 |
 |------|------|
-| `holyEnergy` | 當前的神聖魔法能量值 (0 ~ 100) |
-| `collectedBalls` | 玩家目前已收集到的黃色能量球數量 (最高 8 顆，集滿觸發必殺) |
-| `isHit` | 是否處於受擊硬直中（閃紅、後退、震動） |
-
-
-
-
+| `isKnightMode` | 是否處於北極熊騎士型態（HP < 200 時觸發） |
+| `isCooldown` | 是否處於 5 秒冰藍色喘息期（無即死、暫停攻擊） |
+| `isAttacking` | 是否正在執行斬擊、連刺或騎士 Combo |
+| `dashBuffActive` | 玩家是否已獲得 10 連衝爆發能量上限（330 點） |
