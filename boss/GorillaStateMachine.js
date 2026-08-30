@@ -2,23 +2,26 @@
 // 負責大猩猩的血量、狀態管理與受傷判定
 // 目前設定：
 // 一階段血量 200，攻擊模式為瘋狂跳躍與落地震波
-// 二階段血量 888，過場動畫依序播放：大猩猩先到位 → 黑方塊圍繞、手臂從兩側飛入、高壓黑色電流爆發；二階段攻擊模式為雙手協同組合技（一隻手重拍地面 + 另一隻手瞄準發射毀滅光束，反應時間 0.7 秒，空間太小塞不下玩家判定立刻壓死）；每重複五次攻擊後，會進入 7 秒大猩猩懸浮空中、所有黑色方塊與電流全部消失的破防虛弱時間（玩家可趁機全力輸出攻擊扣血），7秒結束後重新裝備黑方塊肢體與防護罩繼續戰鬥！ (新增中文註解)
+// 二階段血量 888，過場動畫依序播放：大猩猩先到位 → 黑方塊圍繞、手臂從兩側飛入、到位後爆發黑色高壓電流、等電流完全顯現後才開始攻擊；二階段攻擊模式為超大範圍雙手協同組合技（一隻手重拍地面 + 另一隻手瞄準發射毀滅光束，反應時間 0.7 秒，攻擊間隔極短緊湊，攻擊區域覆蓋全螢幕且可直達最邊緣角落防止老六卡角，空間太小塞不下玩家判定立刻壓死，開盾撞擊時確保絕不將玩家壓入地板穿模）；每重複五次攻擊後，會進入 3 秒大猩猩懸浮空中、所有黑色方塊與電流全部消失的破防虛弱時間（玩家可趁機全力輸出攻擊扣血），3秒結束後環繞方塊立刻回來，雙手從兩邊飛入，隨後爆發黑色高壓電流，等電流完全顯現後才恢復攻擊繼續戰鬥！
+// 第三階段（二階段血量歸零後觸發）：血量變為 ？？？，大猩猩移至中央開啟「狂暴無差別攻擊模式」—— 形成電流圓圈並四散 5 道旋轉死光電流，無規律左右旋轉，無視盾牌（碰到直接死亡），玩家需跟隨空隙左右走位閃避持續 10 秒；10 秒結束後爆發全螢幕華麗雷電大爆炸，玩家只要此時開盾即可存活，大猩猩隨之徹底毀滅死亡！ (新增中文註解)
 
-import { startGorillaAttacks, stopGorillaAttacks, isGorillaJumping, startPhase2HandSlamAttacks } from './GorillaAttacks.js';
+import { startGorillaAttacks, stopGorillaAttacks, isGorillaJumping, startPhase2HandSlamAttacks, startFinalOverloadAttack, stopFinalOverloadAttack } from './GorillaAttacks.js';
 import { playerState } from '../player/PlayerController.js';
 
 export const gorillaState = {
-    hp: 200,                   // 當前血量 (一階 200, 二階 888) (新增中文註解)
+    hp: 200,                   // 當前血量 (一階 200, 二階 888, 三階 ？？？) (新增中文註解)
     maxHp: 200,                // 最大血量
     isPhase2: false,           // 是否處於第二階段 (新增中文註解)
-    isTransforming: false,     // 是否處於二階變身過場動畫中 (新增中文註解)
+    isFinalPhase: false,       // 是否處於第三階段狂暴無差別攻擊模式 (新增中文註解)
+    isTransforming: false,     // 是否處於變身過場動畫中 (新增中文註解)
     isInvincible: false,       // 是否處於無敵狀態
     isAttacking: false,        // 當前是否處於攻擊狀態
-    attackCycleCount: 0,       // 二階段攻擊次數累計 (重複 5 次後進入 7 秒破防虛弱期) (新增中文註解)
-    isVulnerable: false,       // 是否處於 7 秒所有黑方塊消失的虛弱期 (新增中文註解)
+    attackCycleCount: 0,       // 二階段攻擊次數累計 (重複 5 次後進入 3 秒破防虛弱期) (新增中文註解)
+    isVulnerable: false,       // 是否處於 3 秒所有黑方塊消失的虛弱期 (新增中文註解)
+    isLightningActive: false,  // 黑色高壓電流是否已啟動（手臂飛入到位後才顯現） (新增中文註解)
     leftArm: null,             // 由黑方塊組成的三段式左手臂 Graphics (新增中文註解)
     rightArm: null,            // 由黑方塊組成的三段式右手臂 Graphics (新增中文註解)
-    lightningGfx: null,        // 全方位黑色電流 Graphics (新增中文註解)
+    lightningGfx: null,        // 全方位狂暴黑色高壓電流 Graphics (新增中文註解)
     orbitingBlocks: [],        // 環繞大猩猩的黑方塊陣列 (新增中文註解)
     orbitAngle: 0,             // 環繞旋轉角度 (新增中文註解)
     jointSwayTime: 0,          // 關節自然微動計時 (新增中文註解)
@@ -26,7 +29,9 @@ export const gorillaState = {
     slamState: {               // 二階段單手向下重砸拍地狀態 (新增中文註解)
         active: false,
         hand: 'left',          // 'left' or 'right'
-        targetX: 0,            // 拍擊地面目標 X 座標 (支援螢幕正中間 width*0.5 與全場追蹤) (新增中文註解)
+        targetX: 0,            // 拍擊地面目標 X 座標 (支援螢幕正中間、兩側及最邊緣角落 0~width) (新增中文註解)
+        warnLeft: 0,           // 拍地危險區左邊界 (新增中文註解)
+        warnRight: 0,          // 拍地危險區右邊界 (新增中文註解)
         phase: 'idle',         // 'telegraph', 'slamming', 'down', 'lifting'
         progress: 0,           // 補間進度 0 ~ 1
         isCrushing: false      // 是否處於壓死判定狀態 (新增中文註解)
@@ -34,7 +39,7 @@ export const gorillaState = {
     laserState: {              // 二階段另一隻手發射毀滅光束狀態 (新增中文註解)
         active: false,
         hand: 'right',         // 'left' or 'right'
-        targetX: 0,            // 光束瞄準地面目標 X (新增中文註解)
+        targetX: 0,            // 光束瞄準地面目標 X (支援最邊緣 0~width) (新增中文註解)
         targetY: 0,            // 光束瞄準地面目標 Y (新增中文註解)
         phase: 'idle',         // 'aiming', 'firing' (新增中文註解)
         isFiring: false        // 是否正在射擊 (新增中文註解)
@@ -125,47 +130,61 @@ function createStoneImpactSpark(scene, x, y) {
 }
 
 /**
- * 繪製多重分叉、多層次的高壓黑色電弧 (新增中文註解)
+ * 繪製多重分叉、狂暴厚實的高壓黑色電流束 (新增中文註解：黑色核心電弧搭配深紫黑芒與暗黑粒子，超高對比、絕不消失)
  */
-function drawBlackLightning(gfx, x1, y1, x2, y2, arcCount = 6, jitterAmt = 18) {
-    const segments = 8;
+function drawBlackLightning(gfx, x1, y1, x2, y2, arcCount = 8, jitterAmt = 22) {
+    const segments = 10;
     const angle = Phaser.Math.Angle.Between(x1, y1, x2, y2);
     const perp = angle + Math.PI / 2;
 
     for (let arc = 0; arc < arcCount; arc++) {
-        gfx.beginPath();
-        gfx.moveTo(x1, y1);
+        const pts = [{ x: x1, y: y1 }];
 
         for (let i = 1; i < segments; i++) {
             const t = i / segments;
             const jitter = (Math.random() - 0.5) * jitterAmt;
             const bx = x1 + (x2 - x1) * t + Math.cos(perp) * jitter;
             const by = y1 + (y2 - y1) * t + Math.sin(perp) * jitter;
-            gfx.lineTo(bx, by);
+            pts.push({ x: bx, y: by });
 
             // 電流隨機分叉小電弧 (新增中文註解)
-            if (Math.random() < 0.4) {
-                const forkLen = Phaser.Math.Between(12, 26);
-                const forkAngle = angle + (Math.random() > 0.5 ? 0.85 : -0.85);
+            if (Math.random() < 0.45) {
+                const forkLen = Phaser.Math.Between(15, 32);
+                const forkAngle = angle + (Math.random() > 0.5 ? 0.9 : -0.9);
+                gfx.beginPath();
                 gfx.moveTo(bx, by);
                 gfx.lineTo(bx + Math.cos(forkAngle) * forkLen, by + Math.sin(forkAngle) * forkLen);
-                gfx.moveTo(bx, by);
+                gfx.lineStyle(2.0, 0xaa00ff, 0.9);
+                gfx.strokePath();
             }
 
-            // 黑色電流能量方塊點 (新增中文註解)
+            // 黑色電流暗物質能量方塊點 (新增中文註解)
             if (i % 2 === 0) {
-                gfx.fillStyle(0x0a0a0a, 0.9);
-                gfx.fillRect(bx - 3, by - 3, 6, 6);
+                gfx.fillStyle(0x000000, 1.0);
+                gfx.fillRect(bx - 5, by - 5, 10, 10);
+                gfx.lineStyle(1.8, 0xbf00ff, 0.95);
+                gfx.strokeRect(bx - 5, by - 5, 10, 10);
             }
         }
 
-        gfx.lineTo(x2, y2);
-        // 主電弧深黑粗線
-        gfx.lineStyle(arc === 0 ? 4.5 : (arc === 1 ? 3.2 : 2.0), 0x040404, 0.95);
+        pts.push({ x: x2, y: y2 });
+
+        // 1. 外層暗黑高壓紫光電暈 (超亮高對比) (新增中文註解)
+        gfx.beginPath();
+        gfx.moveTo(pts[0].x, pts[0].y);
+        for (let p = 1; p < pts.length; p++) {
+            gfx.lineTo(pts[p].x, pts[p].y);
+        }
+        gfx.lineStyle(arc === 0 ? 8.5 : (arc === 1 ? 6.0 : 4.0), 0x9900ff, 0.85);
         gfx.strokePath();
 
-        // 黑色電流外圈黑芒 (新增中文註解)
-        gfx.lineStyle(1.2, 0x2e2e2e, 0.85);
+        // 2. 內層純黑高壓電弧核心 (粗黑閃電柱) (新增中文註解)
+        gfx.beginPath();
+        gfx.moveTo(pts[0].x, pts[0].y);
+        for (let p = 1; p < pts.length; p++) {
+            gfx.lineTo(pts[p].x, pts[p].y);
+        }
+        gfx.lineStyle(arc === 0 ? 5.0 : (arc === 1 ? 3.5 : 2.0), 0x000000, 1.0);
         gfx.strokePath();
     }
 }
@@ -179,7 +198,7 @@ function drawBlackLightning(gfx, x1, y1, x2, y2, arcCount = 6, jitterAmt = 18) {
  * @param {number} damage - 造成的傷害值
  */
 export function handleGorillaHit(scene, bullet, force = 0, upward = 0, damage = 5) {
-    if (!refs.gorilla || !refs.gorilla.active || gorillaState.isInvincible || gorillaState.isTransforming) {
+    if (!refs.gorilla || !refs.gorilla.active || gorillaState.isInvincible || gorillaState.isTransforming || gorillaState.isFinalPhase) {
         if (bullet) {
             createBlockAbsorbSpark(scene, bullet.x, bullet.y);
             bullet.destroy();
@@ -187,7 +206,7 @@ export function handleGorillaHit(scene, bullet, force = 0, upward = 0, damage = 
         return;
     }
 
-    // 第二模式下：若處於防禦狀態 (非 7 秒破防虛弱期)，黑方塊包圍吸收消滅所有子彈且不扣血 (新增中文註解)
+    // 第二模式下：若處於防禦狀態 (非 3 秒破防虛弱期)，黑方塊包圍吸收消滅所有子彈且不扣血 (新增中文註解)
     if (gorillaState.isPhase2 && !gorillaState.isVulnerable) {
         if (bullet) {
             createBlockAbsorbSpark(scene, bullet.x, bullet.y);
@@ -196,7 +215,7 @@ export function handleGorillaHit(scene, bullet, force = 0, upward = 0, damage = 
         return;
     }
 
-    // 扣除大猩猩血量 (一階段或二階段 7 秒虛弱期) (新增中文註解)
+    // 扣除大猩猩血量 (一階段或二階段 3 秒虛弱期) (新增中文註解)
     gorillaState.hp -= damage;
     if (refs.gorillaHPText) {
         refs.gorillaHPText.setText(`大猩猩血量: ${Math.max(0, gorillaState.hp)}`);
@@ -216,8 +235,11 @@ export function handleGorillaHit(scene, bullet, force = 0, upward = 0, damage = 
         if (!gorillaState.isPhase2) {
             // 一階段血量歸零，觸發第二階段變身動畫 (新增中文註解)
             triggerGorillaPhase2(scene);
+        } else if (!gorillaState.isFinalPhase) {
+            // 二階段被擊敗，觸發第三階段（狂暴超載無差別攻擊模式，血量變 ？？？） (新增中文註解)
+            triggerGorillaFinalPhase(scene);
         } else {
-            // 二階段被擊敗，觸發真正死亡 (新增中文註解)
+            // 真正死亡 (新增中文註解)
             handleGorillaDeath(scene);
         }
     }
@@ -230,11 +252,11 @@ export function handleGorillaHit(scene, bullet, force = 0, upward = 0, damage = 
  * 嚴格順序：
  * 1. 定住玩家、停止攻擊、清理舊物件
  * 2. 大猩猩單獨移動到螢幕正中央上方(Y=120)
- * 3. 大猩猩完全到位後，才同時啟動：
+ * 3. 大猩猩完全到位後，才啟動：
  *    - 黑色方塊從四面八方飛來圍繞大猩猩
  *    - 兩隻手臂從螢幕兩邊邊緣外平滑飛入
- *    - 同時爆發狂暴黑色電流連接大猩猩與雙肩
- * 4. 動畫完畢（飛入與聚攏完成後），血量變 888，解除玩家定身，並啟動雙手協同攻擊循環
+ *    - 手臂到位瞬間才爆發黑色高壓電流
+ * 4. 等黑色電流顯現完畢（展示 0.7 秒狂暴電流）後，血量變 888，解除玩家定身，並啟動雙手協同攻擊循環
  */
 export function triggerGorillaPhase2(scene) {
     if (gorillaState.isTransforming) return;
@@ -278,14 +300,11 @@ export function triggerGorillaPhase2(scene) {
             scene.cameras.main.flash(600, 255, 30, 0);
             scene.cameras.main.shake(1000, 0.012);
 
-            // A. 四面八方黑方塊飛來圍繞大猩猩 (大猩猩到位後才開始) (新增中文註解)
+            // A. 四面八方黑方塊立刻飛來圍繞大猩猩 (新增中文註解)
             createConvergingBlackBlocks(scene, width, height, width / 2, gorillaTargetY);
 
-            // B. 兩隻手臂從螢幕兩邊飛過來，同時出現黑色電流效果 (大猩猩到位後才開始) (新增中文註解)
-            createChunkyBlockArmsWithFlyIn(scene, width, height);
-
-            // C. 等待飛入與組裝動畫完畢（1.4 秒後），更新血量為 888 並解除定身，啟動雙手協同攻擊 (新增中文註解)
-            scene.time.delayedCall(1400, () => {
+            // B. 兩隻手臂從螢幕兩邊飛過來，到位後爆發黑色電流，且等電流顯現後才回調 (新增中文註解)
+            createChunkyBlockArmsWithFlyIn(scene, width, height, () => {
                 if (!refs.gorilla || !refs.gorilla.active) return;
 
                 gorillaState.hp = 888;
@@ -310,7 +329,7 @@ export function triggerGorillaPhase2(scene) {
                 scene.cameras.main.flash(400, 255, 255, 255);
                 scene.cameras.main.shake(400, 0.008);
 
-                // 啟動第二階段雙手協同攻擊循環 (新增中文註解)
+                // 電流已完全顯現！啟動第二階段雙手協同攻擊循環 (新增中文註解)
                 startPhase2HandSlamAttacks(scene);
             });
         }
@@ -318,18 +337,65 @@ export function triggerGorillaPhase2(scene) {
 }
 
 /**
- * 建立加粗厚實的三段式黑方塊巨手，並從螢幕兩邊外側平滑飛入，同時產生黑色電流效果 (新增中文註解)
+ * 觸發第三階段（二階段血量歸零後觸發）：血量變為 ？？？，大猩猩移至中央，開啟「狂暴無差別攻擊模式」 (新增中文註解)
  */
-export function createChunkyBlockArmsWithFlyIn(scene, width, height) {
+export function triggerGorillaFinalPhase(scene) {
+    if (gorillaState.isFinalPhase) return;
+    gorillaState.isFinalPhase = true;
+    gorillaState.isInvincible = true;
+    gorillaState.isVulnerable = false;
+
+    // 1. 停止二階段攻擊排程與計時器 (新增中文註解)
+    stopGorillaAttacks();
+    cleanupBlockArms();
+    cleanupOrbitingBlocks();
+
+    const width = scene.cameras.main.width;
+    const height = scene.cameras.main.height;
+    const centerX = width / 2;
+    const centerY = height * 0.38; // 大猩猩停在螢幕半空中央 (新增中文註解)
+
+    // 血量變成 ？？？ (新增中文註解)
+    if (refs.gorillaHPText) {
+        refs.gorillaHPText.setText('大猩猩血量: ？？？');
+        refs.gorillaHPText.setColor('#ff0055');
+    }
+
+    // 狂暴能量紫色強烈閃光與震動 (新增中文註解)
+    scene.cameras.main.flash(600, 180, 0, 255);
+    scene.cameras.main.shake(800, 0.02);
+
+    // 大猩猩移動至螢幕半空正中央 (新增中文註解)
+    refs.gorilla.setAngle(0);
+    scene.tweens.add({
+        targets: refs.gorilla,
+        x: centerX,
+        y: centerY,
+        duration: 800,
+        ease: 'Cubic.easeInOut',
+        onComplete: () => {
+            if (!refs.gorilla || !refs.gorilla.active) return;
+
+            // 啟動狂暴無差別攻擊模式 (持續 10 秒無規律旋轉四散死光 + 華麗雷電大爆炸) (新增中文註解)
+            startFinalOverloadAttack(scene, centerX, centerY);
+        }
+    });
+}
+
+/**
+ * 建立加粗厚實的三段式黑方塊巨手，並從螢幕兩邊外側平滑飛入，到位後才爆發黑色高壓電流，且等電流顯現後才回調 (新增中文註解)
+ */
+export function createChunkyBlockArmsWithFlyIn(scene, width, height, onCompleteCallback = null) {
     cleanupBlockArms();
 
     const leftGfx = scene.add.graphics().setDepth(9988);
     const rightGfx = scene.add.graphics().setDepth(9988);
-    const lightningGfx = scene.add.graphics().setDepth(9987);
+    const lightningGfx = scene.add.graphics().setDepth(9995); // 提升層級確保清晰可見 (新增中文註解)
 
     gorillaState.leftArm = leftGfx;
     gorillaState.rightArm = rightGfx;
     gorillaState.lightningGfx = lightningGfx;
+    gorillaState.isLightningActive = false; // 飛入過程中不顯示電流 (新增中文註解)
 
     // 初始繪製手臂本體 (新增中文註解)
     renderChunkyArms(scene, 0);
@@ -339,24 +405,35 @@ export function createChunkyBlockArmsWithFlyIn(scene, width, height) {
     scene.tweens.add({
         targets: leftGfx,
         x: 0,
-        duration: 1000,
-        ease: 'Cubic.easeOut'
+        duration: 800,
+        ease: 'Cubic.easeOut',
+        onComplete: () => {
+            // 手臂完全到位後，才啟動並爆發黑色高壓電流！ (新增中文註解)
+            gorillaState.isLightningActive = true;
+            scene.cameras.main.flash(250, 60, 0, 100);
+            scene.cameras.main.shake(350, 0.01);
+
+            // 等電流顯現後（展示 700ms 狂暴電流效果）才回調啟動後續攻擊 (新增中文註解)
+            scene.time.delayedCall(700, () => {
+                if (onCompleteCallback) onCompleteCallback();
+            });
+        }
     });
 
     rightGfx.x = width * 0.55;
     scene.tweens.add({
         targets: rightGfx,
         x: 0,
-        duration: 1000,
+        duration: 800,
         ease: 'Cubic.easeOut'
     });
 }
 
 /**
- * 動態渲染厚實三段式手臂（支援雙手協同：一隻手下拍、另一隻手瞄準發射光束與關節微動） (新增中文註解)
+ * 動態渲染厚實三段式手臂（支援雙手協同：一隻手下拍、另一隻手瞄準發射光束與關節微動，支援覆蓋最邊緣角落） (新增中文註解)
  */
-function renderChunkyArms(scene, swayOffset = 0) {
-    if (!gorillaState.leftArm || !gorillaState.rightArm || gorillaState.isVulnerable) return;
+export function renderChunkyArms(scene, swayOffset = 0) {
+    if (!gorillaState.leftArm || !gorillaState.rightArm) return;
 
     const width = scene.cameras.main.width;
     const height = scene.cameras.main.height;
@@ -385,12 +462,12 @@ function renderChunkyArms(scene, swayOffset = 0) {
     let rightPalmX = width * 0.76 - wristSwayX;
     let rightPalmY = height * 0.54 + wristSwayY;
 
-    // 1. 拍地手臂的骨骼動態插值 (新增中文註解)
+    // 1. 拍地手臂的骨骼動態插值（支援大跨度拍擊，包含直達最邊緣 x=0 或 x=width） (新增中文註解)
     const slam = gorillaState.slamState;
     if (slam && slam.active) {
         const isLeftSlam = (slam.hand === 'left');
         const p = slam.progress;
-        const targetX = slam.targetX || (isLeftSlam ? width * 0.35 : width * 0.65);
+        const targetX = (slam.targetX !== undefined) ? slam.targetX : (isLeftSlam ? width * 0.35 : width * 0.65);
 
         if (slam.phase === 'telegraph') {
             // 蓄力抬高手臂 (新增中文註解)
@@ -404,11 +481,11 @@ function renderChunkyArms(scene, swayOffset = 0) {
                 rightPalmY = Phaser.Math.Linear(rightPalmY, height * 0.40, p);
             }
         } else {
-            // 猛砸拍向地面：前臂與爪掌大跨度伸向 targetX (新增中文註解)
+            // 猛砸拍向地面：前臂與爪掌大跨度伸向 targetX，可直達螢幕最邊緣角落 (新增中文註解)
             if (isLeftSlam) {
-                const targetWristX = targetX - 45;
-                const targetPalmX = targetX;
-                const targetElbowX = Math.min(width * 0.14, targetX * 0.22);
+                const targetWristX = Math.max(0, targetX - 45);
+                const targetPalmX = Math.max(15, targetX);
+                const targetElbowX = Math.min(width * 0.16, targetX * 0.25);
 
                 leftElbowX = Phaser.Math.Linear(0, targetElbowX, p);
                 leftElbowY = Phaser.Math.Linear(height * 0.38, height * 0.48, p);
@@ -417,9 +494,9 @@ function renderChunkyArms(scene, swayOffset = 0) {
                 leftPalmX = Phaser.Math.Linear(width * 0.24, targetPalmX, p);
                 leftPalmY = Phaser.Math.Linear(height * 0.54, groundTop - 25, p);
             } else {
-                const targetWristX = targetX + 45;
-                const targetPalmX = targetX;
-                const targetElbowX = Math.max(width * 0.86, width - (width - targetX) * 0.22);
+                const targetWristX = Math.min(width, targetX + 45);
+                const targetPalmX = Math.min(width - 15, targetX);
+                const targetElbowX = Math.max(width * 0.84, width - (width - targetX) * 0.25);
 
                 rightElbowX = Phaser.Math.Linear(width, targetElbowX, p);
                 rightElbowY = Phaser.Math.Linear(height * 0.38, height * 0.48, p);
@@ -487,36 +564,37 @@ function renderChunkyArms(scene, swayOffset = 0) {
 
     gorillaState.armJointNodes = { left: leftNodes, right: rightNodes };
 
-    // 3. 繪製全方位高壓黑色電流 (電流部分純視覺效果，不計入實體碰撞箱) (新增中文註解)
+    // 3. 繪製全方位高壓黑色電流 (手臂飛入到位後才顯示) (新增中文註解)
     if (gorillaState.lightningGfx) {
         gorillaState.lightningGfx.clear();
 
-        // 考慮手臂進場補間偏移計算電流端點 (新增中文註解)
-        const leftArmOffset = gorillaState.leftArm ? gorillaState.leftArm.x : 0;
-        const rightArmOffset = gorillaState.rightArm ? gorillaState.rightArm.x : 0;
+        if (gorillaState.isLightningActive && !gorillaState.isVulnerable && !gorillaState.isFinalPhase) {
+            const leftArmOffset = gorillaState.leftArm ? gorillaState.leftArm.x : 0;
+            const rightArmOffset = gorillaState.rightArm ? gorillaState.rightArm.x : 0;
 
-        // 3.1 上半手臂 45% 長度占比的狂暴黑色高壓電流束 (新增中文註解)
-        drawBlackLightning(gorillaState.lightningGfx, leftNodes.gorillaSide.x, leftNodes.gorillaSide.y, leftNodes.shoulderBlockStart.x + leftArmOffset, leftNodes.shoulderBlockStart.y, 10, 24);
-        drawBlackLightning(gorillaState.lightningGfx, rightNodes.gorillaSide.x, rightNodes.gorillaSide.y, rightNodes.shoulderBlockStart.x + rightArmOffset, rightNodes.shoulderBlockStart.y, 10, 24);
+            // 3.1 上半手臂 45% 長度占比的狂暴黑色高壓電流束 (新增中文註解)
+            drawBlackLightning(gorillaState.lightningGfx, leftNodes.gorillaSide.x, leftNodes.gorillaSide.y, leftNodes.shoulderBlockStart.x + leftArmOffset, leftNodes.shoulderBlockStart.y, 8, 20);
+            drawBlackLightning(gorillaState.lightningGfx, rightNodes.gorillaSide.x, rightNodes.gorillaSide.y, rightNodes.shoulderBlockStart.x + rightArmOffset, rightNodes.shoulderBlockStart.y, 8, 20);
 
-        // 3.2 肘關節空格處跳躍黑色電弧 (新增中文註解)
-        const leftElbowConn = { x: leftNodes.elbow.x + 18 + leftArmOffset, y: leftNodes.elbow.y + 10 };
-        const rightElbowConn = { x: rightNodes.elbow.x - 18 + rightArmOffset, y: rightNodes.elbow.y + 10 };
-        drawBlackLightning(gorillaState.lightningGfx, leftNodes.elbow.x + leftArmOffset, leftNodes.elbow.y, leftElbowConn.x, leftElbowConn.y, 4, 10);
-        drawBlackLightning(gorillaState.lightningGfx, rightNodes.elbow.x + rightArmOffset, rightNodes.elbow.y, rightElbowConn.x, rightElbowConn.y, 4, 10);
+            // 3.2 肘關節空格處跳躍黑色電弧 (新增中文註解)
+            const leftElbowConn = { x: leftNodes.elbow.x + 18 + leftArmOffset, y: leftNodes.elbow.y + 10 };
+            const rightElbowConn = { x: rightNodes.elbow.x - 18 + rightArmOffset, y: rightNodes.elbow.y + 10 };
+            drawBlackLightning(gorillaState.lightningGfx, leftNodes.elbow.x + leftArmOffset, leftNodes.elbow.y, leftElbowConn.x, leftElbowConn.y, 4, 10);
+            drawBlackLightning(gorillaState.lightningGfx, rightNodes.elbow.x + rightArmOffset, rightNodes.elbow.y, rightElbowConn.x, rightElbowConn.y, 4, 10);
 
-        // 3.3 手腕關節空格處跳躍黑色電弧 (新增中文註解)
-        const leftWristConn = { x: leftNodes.wrist.x + 14 + leftArmOffset, y: leftNodes.wrist.y + 4 };
-        const rightWristConn = { x: rightNodes.wrist.x - 14 + rightArmOffset, y: rightNodes.wrist.y + 4 };
-        drawBlackLightning(gorillaState.lightningGfx, leftNodes.wrist.x + leftArmOffset, leftNodes.wrist.y, leftWristConn.x, leftWristConn.y, 4, 10);
-        drawBlackLightning(gorillaState.lightningGfx, rightNodes.wrist.x + rightArmOffset, rightNodes.wrist.y, rightWristConn.x, rightWristConn.y, 4, 10);
+            // 3.3 手腕關節空格處跳躍黑色電弧 (新增中文註解)
+            const leftWristConn = { x: leftNodes.wrist.x + 14 + leftArmOffset, y: leftNodes.wrist.y + 4 };
+            const rightWristConn = { x: rightNodes.wrist.x - 14 + rightArmOffset, y: rightNodes.wrist.y + 4 };
+            drawBlackLightning(gorillaState.lightningGfx, leftNodes.wrist.x + leftArmOffset, leftNodes.wrist.y, leftWristConn.x, leftWristConn.y, 4, 10);
+            drawBlackLightning(gorillaState.lightningGfx, rightNodes.wrist.x + rightArmOffset, rightNodes.wrist.y, rightWristConn.x, rightWristConn.y, 4, 10);
 
-        // 3.4 大猩猩與環繞旋轉黑方塊之間的電流交織 (新增中文註解)
-        if (gorillaState.orbitingBlocks && gorillaState.orbitingBlocks.length > 0) {
-            for (let b = 0; b < 6; b++) {
-                const blockItem = gorillaState.orbitingBlocks[b * 7 % gorillaState.orbitingBlocks.length];
-                if (blockItem && blockItem.gfx && blockItem.gfx.active) {
-                    drawBlackLightning(gorillaState.lightningGfx, width / 2, 120, blockItem.gfx.x, blockItem.gfx.y, 2, 8);
+            // 3.4 大猩猩與環繞旋轉黑方塊之間的電流交織 (新增中文註解)
+            if (gorillaState.orbitingBlocks && gorillaState.orbitingBlocks.length > 0) {
+                for (let b = 0; b < 6; b++) {
+                    const blockItem = gorillaState.orbitingBlocks[b * 7 % gorillaState.orbitingBlocks.length];
+                    if (blockItem && blockItem.gfx && blockItem.gfx.active) {
+                        drawBlackLightning(gorillaState.lightningGfx, width / 2, 120, blockItem.gfx.x, blockItem.gfx.y, 2, 8);
+                    }
                 }
             }
         }
@@ -641,13 +719,13 @@ export function createConvergingBlackBlocks(scene, width, height, gx, gy) {
         // 飛向頂部大猩猩並聚攏在其周圍形成防護環 (新增中文註解)
         const orbitRadius = Phaser.Math.Between(75, 115);
         const targetAngle = angle;
-        const delay = Phaser.Math.Between(80, 500);
+        const delay = Phaser.Math.Between(40, 350);
 
         scene.tweens.add({
             targets: blockGfx,
             x: gx + Math.cos(targetAngle) * orbitRadius,
             y: gy + Math.sin(targetAngle) * orbitRadius,
-            duration: 800,
+            duration: 700,
             delay: delay,
             ease: 'Cubic.easeOut',
             onComplete: () => {
@@ -670,13 +748,14 @@ export function createConvergingBlackBlocks(scene, width, height, gx, gy) {
 export function handleGorillaDeath(scene) {
     if (!refs.gorilla) return;
     stopGorillaAttacks(); // 停止所有攻擊排程 (新增中文註解)
+    stopFinalOverloadAttack(scene);
     cleanupBlockArms();
     cleanupOrbitingBlocks();
 
     refs.gorilla.setActive(false).setVisible(false);
     if (refs.gorilla.body) refs.gorilla.body.enable = false;
 
-    scene.cameras.main.flash(600, 255, 215, 0); // 播放金色閃光
+    scene.cameras.main.flash(800, 255, 215, 0); // 播放金色閃光
 
     // 1.5 秒後重新生成大猩猩 (新增中文註解)
     scene.time.delayedCall(1500, () => {
@@ -691,16 +770,20 @@ export function respawnGorilla(scene) {
     gorillaState.hp = 200;
     gorillaState.maxHp = 200;
     gorillaState.isPhase2 = false;
+    gorillaState.isFinalPhase = false;
     gorillaState.isTransforming = false;
     gorillaState.isInvincible = false;
     gorillaState.isAttacking = false;
     gorillaState.attackCycleCount = 0;
     gorillaState.isVulnerable = false;
+    gorillaState.isLightningActive = false;
     gorillaState.orbitAngle = 0;
     gorillaState.jointSwayTime = 0;
     gorillaState.armJointNodes = null;
     gorillaState.slamState.active = false;
     gorillaState.slamState.targetX = 0;
+    gorillaState.slamState.warnLeft = 0;
+    gorillaState.slamState.warnRight = 0;
     gorillaState.slamState.phase = 'idle';
     gorillaState.slamState.progress = 0;
     gorillaState.slamState.isCrushing = false;
@@ -708,6 +791,7 @@ export function respawnGorilla(scene) {
     gorillaState.laserState.phase = 'idle';
     gorillaState.laserState.isFiring = false;
 
+    stopFinalOverloadAttack(scene);
     cleanupBlockArms();
     cleanupOrbitingBlocks();
 
@@ -743,6 +827,7 @@ export function respawnGorilla(scene) {
 
     if (refs.gorillaHPText) {
         refs.gorillaHPText.setText(`大猩猩血量: ${gorillaState.hp}`);
+        refs.gorillaHPText.setColor('#ffffff');
         refs.gorillaHPText.setVisible(true);
     }
 
@@ -751,20 +836,22 @@ export function respawnGorilla(scene) {
 }
 
 /**
- * 每幀更新大猩猩邏輯 (新增中文註解：二階段黑方塊手臂與防護盾實體碰撞箱檢測，拍地時空間小塞不下立刻壓死判定)
+ * 每幀更新大猩猩邏輯 (新增中文註解：二階段黑方塊手臂與防護盾實體碰撞箱檢測，拍地時空間小塞不下立刻壓死判定，防止玩家穿入地板)
  */
 export function updateGorilla(scene) {
     if (!refs.gorilla || !refs.gorilla.active) return;
-    
-    // 若處於變身過場動畫中，維持定身等待 (新增中文註解)
-    if (gorillaState.isTransforming) return;
 
     const width = scene.cameras.main.width;
     const height = scene.cameras.main.height;
     const groundTop = height - 70;
+    const playerHalfHeight = (refs.player && refs.player.displayHeight) ? refs.player.displayHeight / 2 : 25;
+    const maxFloorY = groundTop - playerHalfHeight;
+
+    // 若處於第三階段狂暴超載，由超載模組接管更新 (新增中文註解)
+    if (gorillaState.isFinalPhase) return;
 
     // 若不在空中跳躍中且是一階段，維持貼地 (新增中文註解)
-    if (!isGorillaJumping() && !gorillaState.isPhase2) {
+    if (!isGorillaJumping() && !gorillaState.isPhase2 && !gorillaState.isTransforming) {
         const halfHeight = refs.gorilla.displayHeight / 2;
         refs.gorilla.y = groundTop - halfHeight;
         if (refs.gorilla.body) {
@@ -773,21 +860,18 @@ export function updateGorilla(scene) {
         }
     }
 
-    // 二階段：大猩猩維持懸浮於頂部(Y=120)或虛弱浮動，更新全方位黑色遠端電流與厚實手臂，吸收消滅子彈，檢測玩家黑方塊實體碰撞箱與壓死判定 (新增中文註解)
-    if (gorillaState.isPhase2) {
+    // 二階段（包含變身中與戰鬥中）：更新全方位黑色遠端電流與厚實手臂，吸收消滅子彈，檢測玩家黑方塊實體碰撞箱與壓死判定 (新增中文註解)
+    if (gorillaState.isPhase2 || gorillaState.isTransforming) {
         const gorillaX = width / 2;
         const gorillaY = refs.gorilla.y;
 
-        refs.gorilla.x = gorillaX;
-        refs.gorilla.setAngle(0);
-        if (refs.gorilla.body) {
-            refs.gorilla.body.allowGravity = false;
-            refs.gorilla.body.setVelocity(0, 0);
-        }
-
-        // 若處於 7 秒虛弱期：黑方塊全部消失，大猩猩純懸浮於空中無防護，不執行手臂碰撞與電流 (新增中文註解)
-        if (gorillaState.isVulnerable) {
-            return;
+        if (!gorillaState.isTransforming) {
+            refs.gorilla.x = gorillaX;
+            refs.gorilla.setAngle(0);
+            if (refs.gorilla.body) {
+                refs.gorilla.body.allowGravity = false;
+                refs.gorilla.body.setVelocity(0, 0);
+            }
         }
 
         // 黑方塊環繞旋轉跟隨頂部大猩猩 (新增中文註解)
@@ -805,9 +889,19 @@ export function updateGorilla(scene) {
             });
         }
 
-        // 手臂關節自然微動與黑色遠端電流渲染 (新增中文註解)
-        gorillaState.jointSwayTime += 0.04;
+        // 若處於 3 秒虛弱期：黑方塊全部消失，大猩猩純懸浮於空中無防護，不執行手臂碰撞與電流 (新增中文註解)
+        if (gorillaState.isVulnerable) {
+            return;
+        }
+
+        // 手臂關節自然微動與黑色遠端高壓電流渲染 (每幀必定流暢執行) (新增中文註解)
+        gorillaState.jointSwayTime += 0.05;
         renderChunkyArms(scene, gorillaState.jointSwayTime);
+
+        // 若處於過場動畫中，暫不執行子彈吸收與碰撞傷害 (新增中文註解)
+        if (gorillaState.isTransforming) {
+            return;
+        }
 
         const nodes = gorillaState.armJointNodes;
 
@@ -842,7 +936,7 @@ export function updateGorilla(scene) {
         });
 
         // 玩家實體碰撞箱與壓死檢測 (新增中文註解)
-        if (refs.player && refs.player.active && !gorillaState.isTransforming) {
+        if (refs.player && refs.player.active) {
             const px = refs.player.x;
             const py = refs.player.y;
             const pRadius = 25; // 玩家碰撞半徑
@@ -852,15 +946,14 @@ export function updateGorilla(scene) {
             const isShielding = (playerState.isInvincible || !!scene.currentDashShield);
             const slam = gorillaState.slamState;
 
-            // 【核心壓死檢測】：拍地時若玩家被壓在巨手與地面之間，空間小塞不下立刻死亡！ (新增中文註解)
+            // 【核心壓死檢測】：拍地時若玩家被壓在巨手與地面之間，空間小塞不下立刻死亡！無視任何盾牌與無敵狀態 (新增中文註解)
             if (slam && slam.isCrushing && nodes) {
                 const isLeftSlam = (slam.hand === 'left');
                 const slamNodes = isLeftSlam ? nodes.left : nodes.right;
 
-                // 計算拍地巨手水平涵蓋範圍 (以 targetX 為中心約 ±120px) (新增中文註解)
-                const slamCenterX = slam.targetX || (isLeftSlam ? width * 0.35 : width * 0.65);
-                const minSlamX = slamCenterX - 120;
-                const maxSlamX = slamCenterX + 120;
+                // 使用精準邊界涵蓋範圍 (包含直達螢幕 0 或 width 最邊緣) (新增中文註解)
+                const minSlamX = (slam.warnLeft !== undefined) ? slam.warnLeft - 10 : (slam.targetX - 170);
+                const maxSlamX = (slam.warnRight !== undefined) ? slam.warnRight + 10 : (slam.targetX + 170);
 
                 // 若玩家水平處於拍地範圍內
                 if (px >= minSlamX && px <= maxSlamX) {
@@ -871,8 +964,8 @@ export function updateGorilla(scene) {
                     // 玩家站立高度約 50px。若空間小於 35px 塞不下玩家，且玩家位於手部下方，判定為被巨手壓碎！ (新增中文註解)
                     if (availableSpace < 35 && py >= (handBottomY - 50)) {
                         if (refs.triggerCrash) {
-                            // 空間小塞不下，直接壓碎當機死亡（不論是否開盾！） (新增中文註解)
-                            refs.triggerCrash();
+                            // 空間小塞不下，直接壓碎當機死亡（無視任何盾牌與無敵狀態！） (新增中文註解)
+                            refs.triggerCrash(true);
                             return;
                         }
                     }
@@ -917,7 +1010,7 @@ export function updateGorilla(scene) {
                         refs.triggerCrash();
                     }
                 } else {
-                    // 開盾狀態碰觸實體黑方塊：如同撞到堅硬石頭，實體反彈與推開，不穿透且不受傷 (新增中文註解)
+                    // 開盾狀態碰觸實體黑方塊：如同撞到堅硬石頭，實體反彈與推開，絕不壓入地板 (新增中文註解)
                     let normalX = 0;
                     let normalY = 0;
                     let contactX = px;
@@ -927,6 +1020,13 @@ export function updateGorilla(scene) {
                         const dist = Math.max(0.1, minDistance);
                         normalX = (px - closestPt.x) / dist;
                         normalY = (py - closestPt.y) / dist;
+
+                        // 防止向下推擠穿透地板：若推力朝下且玩家接近地板，強制改為水平向兩側推開 (新增中文註解)
+                        if (normalY > 0 && py > groundTop - 65) {
+                            normalY = 0;
+                            normalX = (px >= closestPt.x) ? 1 : -1;
+                        }
+
                         contactX = closestPt.x + normalX * armThickness;
                         contactY = closestPt.y + normalY * armThickness;
 
@@ -943,6 +1043,11 @@ export function updateGorilla(scene) {
                         // 將玩家推擠到防護環外側 (新增中文註解)
                         refs.player.x = gorillaX + normalX * (110 + pRadius + 2);
                         refs.player.y = gorillaY + normalY * (110 + pRadius + 2);
+                    }
+
+                    // 嚴格地板約束：強制鎖定玩家底部不能低於地板 (防止穿模卡地板) (新增中文註解)
+                    if (refs.player.y > maxFloorY) {
+                        refs.player.y = maxFloorY;
                     }
 
                     // 剛體撞擊反彈速度反射 (新增中文註解)
@@ -963,6 +1068,14 @@ export function updateGorilla(scene) {
                     scene.cameras.main.shake(60, 0.003);
                 }
             }
+
+            // 全局地板高度安全約束 (防止任何外力將玩家壓入地板) (新增中文註解)
+            if (refs.player && refs.player.y > maxFloorY) {
+                refs.player.y = maxFloorY;
+                if (refs.player.body && refs.player.body.velocity.y > 0) {
+                    refs.player.body.setVelocityY(0);
+                }
+            }
         }
     }
 }
@@ -971,6 +1084,7 @@ export function updateGorilla(scene) {
  * 清理黑方塊手臂與電流 (新增中文註解)
  */
 export function cleanupBlockArms() {
+    gorillaState.isLightningActive = false;
     if (gorillaState.leftArm) {
         gorillaState.leftArm.destroy();
         gorillaState.leftArm = null;
@@ -1005,14 +1119,18 @@ export function cleanupOrbitingBlocks() {
  */
 export function cleanupGorilla(scene) {
     stopGorillaAttacks(); // 停止所有攻擊與計時器 (新增中文註解)
+    stopFinalOverloadAttack(scene);
     cleanupBlockArms();
     cleanupOrbitingBlocks();
 
+    gorillaState.hp = 200;
     gorillaState.isPhase2 = false;
+    gorillaState.isFinalPhase = false;
     gorillaState.isTransforming = false;
     gorillaState.isInvincible = false;
     gorillaState.attackCycleCount = 0;
     gorillaState.isVulnerable = false;
+    gorillaState.isLightningActive = false;
 
     // 確保玩家未處於定身狀態 (新增中文註解)
     playerState.cannotMove = false;
@@ -1027,6 +1145,7 @@ export function cleanupGorilla(scene) {
         refs.gorilla.setAngle(0);
     }
     if (refs.gorillaHPText) {
+        refs.gorillaHPText.setColor('#ffffff');
         refs.gorillaHPText.setVisible(false);
     }
 }
