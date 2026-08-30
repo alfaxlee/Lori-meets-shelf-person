@@ -263,10 +263,6 @@ function createScene() {
         respawnLoli(scene);
     }});
 
-    // 初始化大猩猩狀態機與攻擊模組參考 (新增中文註解：傳入 shockwaves 與 platforms)
-    initGorillaAttackRefs({ gorilla, player, shockwaves, platforms });
-    initGorillaStateRefs({ gorilla, gorillaHPText, loli, player });
-
     // 當機畫面 (處理玩家死亡/受傷)
     let isCrashed = false; // 防止多次觸發當機
     const triggerCrash = (force = false) => {
@@ -279,6 +275,10 @@ function createScene() {
         showCrashScreen(this); // 委派給 CrashScreen 模組處理 DOM 與動畫
     };
     this.triggerCrash = triggerCrash; // 將當機函式掛載到場景，供外部雷射/地刺使用
+
+    // 初始化大猩猩狀態機與攻擊模組參考 (新增中文註解：傳入 shockwaves、platforms、lasers 與各武器子彈群組)
+    initGorillaAttackRefs({ gorilla, player, shockwaves, platforms, lasers, triggerCrash: (force) => triggerCrash(force) });
+    initGorillaStateRefs({ gorilla, gorillaHPText, loli, player, mgBullets, sgBullets, snBullets, triggerCrash: (force) => triggerCrash(force) });
 
     this.physics.add.collider(player, platforms);
     this.physics.add.collider(loli, platforms);
@@ -3244,7 +3244,7 @@ function showFinalEndingCredits(scene) {
 }
 
 function createDashShield(scene, player, angle) {
-    const shield = scene.add.graphics(); let hasHitLoli = false; let hasHitUncle = false; let hasHitDora = false; let hasHitYeah = false; let hasHitPoopKing = false; let hasHitNoGG = false; let alive = true;
+    const shield = scene.add.graphics(); let hasHitLoli = false; let hasHitUncle = false; let hasHitDora = false; let hasHitYeah = false; let hasHitPoopKing = false; let hasHitNoGG = false; let hasHitGorilla = false; let alive = true;
     scene.time.delayedCall(1150, () => { alive = false; });
 
     // 儲存護盾參考至場景，以便後續可以被「請屎皇」斬擊立刻擊碎 (新增中文註解：儲存目前護盾參考以便外部調用銷毀)
@@ -3322,6 +3322,16 @@ function createDashShield(scene, player, angle) {
                     handleNoGGHit(scene, null, 1500, 500, 25, centerX, centerY);
                 }
                 hasHitNoGG = true;
+            }
+        }
+        // 護盾碰撞大猩猩 (新增中文註解：一階段或二階段7秒破防虛弱期造成傷害與受擊反饋，平時防禦狀態如岩石阻擋)
+        if (!hasHitGorilla && gorilla && gorilla.active) {
+            const distG = Phaser.Math.Distance.Between(centerX, centerY, gorilla.x, gorilla.y);
+            if (distG < radius + 40) {
+                if (!gorillaState.isPhase2 || gorillaState.isVulnerable) {
+                    handleGorillaHit(scene, null, 1500, 500, 25);
+                }
+                hasHitGorilla = true;
             }
         }
         // 護盾阻擋並銷毀迪克小刀 (新增中文註解：護盾阻擋迪克小刀判定，阻擋彈幕)
