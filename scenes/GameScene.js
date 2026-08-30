@@ -17,6 +17,7 @@ import { initYeahAttackRefs } from '../boss/YeahAttacks.js';
 import { initPoopKingStateRefs, poopKingState, handlePoopKingHit, updatePoopKingStateMachine, respawnPoopKing, cleanupPoopKing } from '../boss/PoopKingStateMachine.js';
 import { initPoopKingAttackRefs } from '../boss/PoopKingAttacks.js';
 import { initNoGGStateRefs, noGGState, handleNoGGHit, updateNoGGStateMachine, respawnNoGG, cleanupNoGG, triggerCXKDeathQuiz } from '../boss/NoGGStateMachine.js';
+import { initNoGGAttackRefs } from '../boss/NoGGAttacks.js';
 import { initGorillaStateRefs, gorillaState, handleGorillaHit, updateGorilla, respawnGorilla, cleanupGorilla } from '../boss/GorillaStateMachine.js';
 import { initGorillaAttackRefs } from '../boss/GorillaAttacks.js';
 
@@ -571,6 +572,8 @@ function createScene() {
     initNoGGStateRefs({ noGG, player, noGGHPText, platforms, dickKnives, loli, onNoGGDeath: (scene) => {
         respawnNoGG(scene);
     }});
+    // 初始化我沒有GG攻擊模組參考 (新增中文註解：初始化我沒有GG與蔡徐坤的攻擊模組參考)
+    initNoGGAttackRefs({ noGG, player, noGGHPText, platforms, dickKnives, loli });
 
     // 初始化猥瑣大叔狀態機參考
     initUncleStateRefs({ uncle, uncleHPText, onUncleDeath: (scene) => {
