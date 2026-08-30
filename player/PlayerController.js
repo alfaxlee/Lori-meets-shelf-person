@@ -25,9 +25,12 @@ export const playerState = {
  */
 export function updatePlayer(scene, player, boss, createDashShieldFn) {
     const s = playerState;
+    const isGorilla = scene.selectedBoss === 'gorilla'; // 判斷是否為大猩猩戰鬥 (新增中文註解)
 
+    // 大猩猩局能量回復速度 2 倍快 (新增中文註解)
+    const currentRegen = isGorilla ? (s.energyRegen * 2) : s.energyRegen;
     if (s.dashEnergy < s.maxDashEnergy) {
-        s.dashEnergy = Math.min(s.maxDashEnergy, s.dashEnergy + s.energyRegen);
+        s.dashEnergy = Math.min(s.maxDashEnergy, s.dashEnergy + currentRegen);
     }
 
     // 檢查是否處於靜止狀態，且在 combo 之外 (定身狀態為 combo 期間，故須排他) (新增中文註解：靜止 0.5 秒回滿能量條邏輯)
@@ -46,10 +49,13 @@ export function updatePlayer(scene, player, boss, createDashShieldFn) {
         s.stillStartTime = null; // 移開或移動時重置計時器
     }
 
+    // 大猩猩局衝刺耗能減半 (1/2)，其餘 Boss 為原本消耗量 (新增中文註解)
+    const currentCost = isGorilla ? (s.dashCost / 2) : s.dashCost;
+
     const dashPressed = Phaser.Input.Keyboard.JustDown(scene.keys.dash) || mobileInput.dash;
     if (dashPressed) {
-        if (s.dashEnergy >= s.dashCost && !s.isDashing) {
-            s.dashEnergy -= s.dashCost;
+        if (s.dashEnergy >= currentCost && !s.isDashing) {
+            s.dashEnergy -= currentCost;
             s.isDashing = true;
             s.isInvincible = true; 
             player.setAlpha(0.5); 
@@ -71,7 +77,7 @@ export function updatePlayer(scene, player, boss, createDashShieldFn) {
                 if (scene.isDoraDomainActive) {
                     speed *= 0.5;
                 }
-            } // 補回被誤刪的 else 區間結尾括號 (修改)
+            }
             
             // 如果處於定身/Combo 期間，衝刺速度設為 0 以防移動位置 (修改)
             if (s.cannotMove) {
@@ -96,7 +102,7 @@ export function updatePlayer(scene, player, boss, createDashShieldFn) {
                     player.setAlpha(1);
                 });
             });
-        } else if (s.dashEnergy < s.dashCost && !s.isDashing) {
+        } else if (s.dashEnergy < currentCost && !s.isDashing) {
             scene.tweens.add({
                 targets: getEnergyBar(),
                 x: '+=5',

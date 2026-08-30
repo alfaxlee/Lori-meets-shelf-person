@@ -17,6 +17,8 @@ import { initYeahAttackRefs } from '../boss/YeahAttacks.js';
 import { initPoopKingStateRefs, poopKingState, handlePoopKingHit, updatePoopKingStateMachine, respawnPoopKing, cleanupPoopKing } from '../boss/PoopKingStateMachine.js';
 import { initPoopKingAttackRefs } from '../boss/PoopKingAttacks.js';
 import { initNoGGStateRefs, noGGState, handleNoGGHit, updateNoGGStateMachine, respawnNoGG, cleanupNoGG, triggerCXKDeathQuiz } from '../boss/NoGGStateMachine.js';
+import { initGorillaStateRefs, gorillaState, handleGorillaHit, updateGorilla, respawnGorilla, cleanupGorilla } from '../boss/GorillaStateMachine.js';
+import { initGorillaAttackRefs } from '../boss/GorillaAttacks.js';
 
 let player;
 let loli;
@@ -43,6 +45,8 @@ let polarBear;         // 北極熊 Sprite (新增中文註解：定義北極熊
 let noGG;                  // 我沒有GG Sprite (新增中文註解：定義我沒有GG精靈)
 let noGGHPText;            // 我沒有GG 血量文字 (新增中文註解：定義我沒有GG血量顯示文字)
 let dickKnives;            // 迪克小刀攻擊群組 (新增中文註解：定義迪克小刀攻擊群組)
+let gorilla;               // 大猩猩 Sprite (新增中文註解：定義大猩猩精靈)
+let gorillaHPText;         // 大猩猩 血量文字 (新增中文註解：定義大猩猩血量顯示文字)
 
 // --- 武器系統變數 --- (已搬移至 weapons/WeaponManager.js)
 let shockwaves; // 衝擊波群組
@@ -79,19 +83,21 @@ function preloadAssets() {
     this.load.image('poopKing', './assets/images/請屎皇.jpg');
     // 載入我沒有GG 圖片 (新增中文註解：載入我沒有GG Boss 圖片)
     this.load.image('noGG', './assets/images/我沒有GG.jpg');
+    // 載入大猩猩 圖片 (新增中文註解：載入新 Boss 大猩猩圖片)
+    this.load.image('gorilla', './assets/images/無敵大猩猩.jpg');
     // 載入迪克小刀 圖片 (新增中文註解：載入迪克小刀攻擊素材)
     this.load.image('dickKnife', './assets/images/迪克小刀.jpg');
-    // 載入蔡徐坤第二階段 4 張圖片素材 (新增中文註解：載入蔡徐坤階段換圖素材)
-    this.load.image('cxk_1', './assets/images/cxk_1.jpg');
-    this.load.image('cxk_2', './assets/images/cxk_2.jpg');
-    this.load.image('cxk_3', './assets/images/cxk_3.jpg');
-    this.load.image('cxk_4', './assets/images/cxk_4.jpg');
+    // 載入蔡徐坤第二階段 4 張圖片素材 (獨立於 cxk_frames 資料夾) (新增中文註解：載入蔡徐坤階段換圖素材)
+    this.load.image('cxk_1', './assets/images/cxk_frames/cxk_1.jpg');
+    this.load.image('cxk_2', './assets/images/cxk_frames/cxk_2.jpg');
+    this.load.image('cxk_3', './assets/images/cxk_frames/cxk_3.jpg');
+    this.load.image('cxk_4', './assets/images/cxk_frames/cxk_4.jpg');
     // 載入蔡徐坤中分頭爆炸圖片素材 (新增中文註解：載入中分頭絕招圖片)
-    this.load.image('cxk_explode', './assets/images/cxk_explode.jpg');
-    // 載入蔡徐坤被擊敗後 3 張動作圖片與籃球素材 (新增中文註解)
-    this.load.image('cxk_death_1', './assets/images/cxk_death_1.jpg');
-    this.load.image('cxk_death_2', './assets/images/cxk_death_2.jpg');
-    this.load.image('cxk_death_3', './assets/images/cxk_death_3.jpg');
+    this.load.image('cxk_explode', './assets/images/cxk_frames/cxk_explode.jpg');
+    // 載入蔡徐坤被擊敗後 3 張動作圖片 (獨立於 cxk_death_frames 資料夾) 與籃球素材 (新增中文註解)
+    this.load.image('cxk_death_1', './assets/images/cxk_death_frames/cxk_death_1.jpg');
+    this.load.image('cxk_death_2', './assets/images/cxk_death_frames/cxk_death_2.jpg');
+    this.load.image('cxk_death_3', './assets/images/cxk_death_frames/cxk_death_3.jpg');
     this.load.image('basketball', './assets/images/籃球.png');
 
     // 載入北極熊走路 gif 拆解的 16 個影格 (新增中文註解：載入北極熊動畫格)
@@ -211,6 +217,27 @@ function createScene() {
     noGG.setVisible(false);
     noGG.body.enable = false;
 
+    // 建立大猩猩 (新增中文註解：建立大猩猩 Sprite，初始放於畫面外遠處 (-500, -500))
+    gorilla = this.physics.add.sprite(-500, -500, 'gorilla');
+    gorilla.setDisplaySize(loli.displayWidth * 1.25, loli.displayHeight * 1.25);
+    gorilla.body.setSize(gorilla.width, gorilla.height, true);
+    gorilla.body.allowGravity = false; // 關閉重力防止插入地板 (新增中文註解)
+    gorilla.setImmovable(true);        // 設定固定剛體 (新增中文註解)
+    gorilla.setCollideWorldBounds(true);
+    gorilla.setBounce(0.1);
+    gorilla.setActive(false);
+    gorilla.setVisible(false);
+    gorilla.body.enable = false;
+
+    // 建立大猩猩血量顯示文字 (移至 Y=100 避開頂部狙擊槍彈藥 HUD) (新增中文註解)
+    gorillaHPText = this.add.text(width / 2, 100, '大猩猩血量: 200', {
+        fontSize: '28px',
+        fill: '#ffffff',
+        fontStyle: 'bold',
+        stroke: '#000000',
+        strokeThickness: 5
+    }).setOrigin(0.5).setVisible(false);
+
     // 建立北極熊 Sprite (預設不啟用與隱藏) (新增中文註解：建立北極熊精靈，縮小至 0.55 倍保持原比例且略大於請屎皇)
     polarBear = this.add.sprite(0, 0, 'polar_bear_0');
     polarBear.setScale(0.55); // 縮小至 0.55 倍，保持比例且稍大於請屎皇 (修改)
@@ -235,6 +262,10 @@ function createScene() {
     initBossRefs({ loli, player, lasers, enemyBalls, shockwaves, onLoliDeath: (scene) => {
         respawnLoli(scene);
     }});
+
+    // 初始化大猩猩狀態機與攻擊模組參考 (新增中文註解：傳入 shockwaves 與 platforms)
+    initGorillaAttackRefs({ gorilla, player, shockwaves, platforms });
+    initGorillaStateRefs({ gorilla, gorillaHPText, loli, player });
 
     // 當機畫面 (處理玩家死亡/受傷)
     let isCrashed = false; // 防止多次觸發當機
@@ -278,6 +309,13 @@ function createScene() {
     this.physics.add.collider(noGG, mgBullets, (obj1, obj2) => { handleNoGGHit(this, obj2, 600, 200, 5); });
     this.physics.add.collider(noGG, sgBullets, (obj1, obj2) => { handleNoGGHit(this, obj2, 400, 150, 25); });
     this.physics.add.collider(noGG, snBullets, (obj1, obj2) => { handleNoGGHit(this, obj2, 1500, 500, 50); });
+
+    this.physics.add.collider(gorilla, platforms);  // 大猩猩與地板碰撞 (新增中文註解)
+
+    // 大猩猩的子彈碰撞 (新增中文註解：設定大猩猩被玩家武器子彈擊中時的傷害判定)
+    this.physics.add.collider(gorilla, mgBullets, (obj1, obj2) => { handleGorillaHit(this, obj2, 0, 0, 5); });
+    this.physics.add.collider(gorilla, sgBullets, (obj1, obj2) => { handleGorillaHit(this, obj2, 0, 0, 25); });
+    this.physics.add.collider(gorilla, snBullets, (obj1, obj2) => { handleGorillaHit(this, obj2, 0, 0, 50); });
 
     // 迪克小刀碰撞邏輯 (新增中文註解：第一階段迪克小刀碰到地板銷毀，碰到玩家直接當機，不進入考題)
     this.physics.add.collider(dickKnives, platforms, (knife) => { knife.destroy(); });
@@ -347,6 +385,11 @@ function createScene() {
         } else {
             triggerCrash(); // 第一階段我沒有GG直接當機，保持神秘感
         }
+    });
+    // 碰到大猩猩 (新增中文註解：玩家碰觸大猩猩觸發當機)
+    this.physics.add.collider(player, gorilla, () => {
+        if (playerState.cannotMove || playerState.isInvincible || playerState.isDashing) return;
+        triggerCrash();
     });
     this.physics.add.overlap(player, shockwaves, triggerCrash); // 玩家碰到衝擊波也會當機
     this.physics.add.overlap(player, enemyBalls, triggerCrash); // 玩家碰到彈跳球也會當機
@@ -669,6 +712,35 @@ function createScene() {
         // 重生我沒有GG (新增中文註解：重置並生成我沒有GG)
         cleanupNoGG(this);
         respawnNoGG(this);
+    } else if (this.selectedBoss === 'gorilla') {
+        // 隱藏其它 Boss (新增中文註解：隱藏大猩猩以外的所有 Boss)
+        loli.setActive(false); loli.setVisible(false); loli.body.enable = false;
+        uncle.setActive(false); uncle.setVisible(false); uncle.body.enable = false;
+        dora.setActive(false); dora.setVisible(false); dora.body.enable = false;
+        yeah.setActive(false); yeah.setVisible(false); yeah.body.enable = false;
+        poopKing.setActive(false); poopKing.setVisible(false); poopKing.body.enable = false;
+        noGG.setActive(false); noGG.setVisible(false); noGG.body.enable = false;
+
+        showLoliHPText(false);
+        uncleHPText.setVisible(false);
+        doraHPText.setVisible(false);
+        yeahHPText.setVisible(false);
+        poopKingHPText.setVisible(false);
+        noGGHPText.setVisible(false);
+        yeahEnergyText.setVisible(false);
+        if (yeahEnergyBar) {
+            yeahEnergyBar.clear();
+            yeahEnergyBar.setVisible(false);
+        }
+
+        gorillaHPText.setVisible(true); // 顯示大猩猩 HP (新增中文註解)
+
+        // 重置玩家出生點至左側 (width / 4) (新增中文註解)
+        player.setPosition(width / 4, height - 150);
+
+        // 重生大猩猩 (新增中文註解：重置並生成大猩猩，站在原地不動)
+        cleanupGorilla(this);
+        respawnGorilla(this);
     } else {
         // 預設為蘿莉局：顯示蘿莉 HP，大叔與其它 Boss 保持隱藏與停用
         showLoliHPText(true);
@@ -686,6 +758,8 @@ function createScene() {
         poopKingHPText.setVisible(false);
         noGG.setActive(false); noGG.setVisible(false); noGG.body.enable = false; // 新增我沒有GG 停用 (新增中文註解)
         noGGHPText.setVisible(false);     // 新增
+        gorilla.setActive(false); gorilla.setVisible(false); gorilla.body.enable = false; // 停用大猩猩 (新增中文註解)
+        gorillaHPText.setVisible(false);
     }
 }
 
@@ -704,8 +778,8 @@ function updateScene(time, delta) {
         return;
     }
 
-    // 依據當前選定 Boss 決定自動瞄準目標與碰撞對象 (新增中文註解：加入請屎皇與我沒有GG到 activeBoss 的判定)
-    const activeBoss = this.selectedBoss === 'uncle' ? uncle : (this.selectedBoss === 'dora' ? dora : (this.selectedBoss === 'yeah' ? yeah : (this.selectedBoss === 'poopKing' ? poopKing : (this.selectedBoss === 'noGG' ? noGG : loli))));
+    // 依據當前選定 Boss 決定自動瞄準目標與碰撞對象 (新增中文註解：加入大猩猩到 activeBoss 的判定)
+    const activeBoss = this.selectedBoss === 'uncle' ? uncle : (this.selectedBoss === 'dora' ? dora : (this.selectedBoss === 'yeah' ? yeah : (this.selectedBoss === 'poopKing' ? poopKing : (this.selectedBoss === 'noGG' ? noGG : (this.selectedBoss === 'gorilla' ? gorilla : loli)))));
 
     // 繪製衝刺能量條（委派給 HUD 模組，僅在請屎皇戰鬥中繪製衝刺警示）(修改)
     drawEnergyBar(playerState.dashEnergy, playerState.maxDashEnergy, playerState.dashEnergyColor, this.selectedBoss === 'poopKing');
@@ -829,6 +903,11 @@ function updateScene(time, delta) {
     // 更新我沒有GG邏輯 (新增中文註解：當我沒有GG active 時呼叫其狀態機更新)
     if (noGG && noGG.active) {
         updateNoGGStateMachine(this, time, delta);
+    }
+
+    // 更新大猩猩邏輯 (新增中文註解：當大猩猩 active 時呼叫其狀態機更新)
+    if (gorilla && gorilla.active) {
+        updateGorilla(this);
     }
 }
 
@@ -2442,11 +2521,11 @@ function triggerBossAlignAndExplodeScript(scene) {
     }
 
     // 1. 所有 Boss 出場並排成一排 (站在地板上 height - 110)
-    // 蘿莉 (紫色), 猥瑣大叔 (黑色/暗灰), 哆啦噩夢 (藍色), 顏王Yeah (黃色), 請屎皇 (綠色), 我沒有GG (紫色) (新增中文註解：六位 Boss 進行排排站定位)
+    // 蘿莉 (紫色), 猥瑣大叔 (黑色/暗灰), 哆啦噩夢 (藍色), 顏王Yeah (黃色), 請屎皇 (綠色), 我沒有GG (紫色), 大猩猩 (橘紅) (新增中文註解：七位 Boss 進行排排站定位)
     // 修正：必須強制設定 .setDepth(9985) 使其顯示高於白色背景與地板之上！ (新增中文註解：提昇深度至 9985 避免被白色背景與地板遮擋)
     setTimeout(() => {
         if (loli) {
-            loli.setPosition(width * 0.14, height - 110);
+            loli.setPosition(width * 0.125, height - 110);
             loli.setVisible(true).setAlpha(0).setDepth(9985);
             if (loli.body) loli.body.enable = false; // 關閉物理，避免因重力掉落
             scene.tweens.add({ targets: loli, alpha: 1, duration: 400 });
@@ -2455,7 +2534,7 @@ function triggerBossAlignAndExplodeScript(scene) {
 
     setTimeout(() => {
         if (uncle) {
-            uncle.setPosition(width * 0.28, height - 110);
+            uncle.setPosition(width * 0.25, height - 110);
             uncle.setVisible(true).setAlpha(0).setDepth(9985);
             if (uncle.body) uncle.body.enable = false;
             scene.tweens.add({ targets: uncle, alpha: 1, duration: 400 });
@@ -2464,7 +2543,7 @@ function triggerBossAlignAndExplodeScript(scene) {
 
     setTimeout(() => {
         if (dora) {
-            dora.setPosition(width * 0.42, height - 110);
+            dora.setPosition(width * 0.375, height - 110);
             dora.setVisible(true).setAlpha(0).setDepth(9985);
             if (dora.body) dora.body.enable = false;
             scene.tweens.add({ targets: dora, alpha: 1, duration: 400 });
@@ -2473,7 +2552,7 @@ function triggerBossAlignAndExplodeScript(scene) {
 
     setTimeout(() => {
         if (yeah) {
-            yeah.setPosition(width * 0.56, height - 110);
+            yeah.setPosition(width * 0.5, height - 110);
             yeah.setVisible(true).setAlpha(0).setDepth(9985);
             if (yeah.body) yeah.body.enable = false;
             scene.tweens.add({ targets: yeah, alpha: 1, duration: 400 });
@@ -2482,7 +2561,7 @@ function triggerBossAlignAndExplodeScript(scene) {
 
     setTimeout(() => {
         if (poopKing) {
-            poopKing.setPosition(width * 0.70, height - 110);
+            poopKing.setPosition(width * 0.625, height - 110);
             poopKing.setVisible(true).setAlpha(0).setDepth(9985);
             if (poopKing.body) poopKing.body.enable = false;
             scene.tweens.add({ targets: poopKing, alpha: 1, duration: 400 });
@@ -2491,12 +2570,21 @@ function triggerBossAlignAndExplodeScript(scene) {
 
     setTimeout(() => {
         if (noGG) {
-            noGG.setPosition(width * 0.84, height - 110);
+            noGG.setPosition(width * 0.75, height - 110);
             noGG.setVisible(true).setAlpha(0).setDepth(9985);
             if (noGG.body) noGG.body.enable = false;
             scene.tweens.add({ targets: noGG, alpha: 1, duration: 400 });
         }
     }, 1100);
+
+    setTimeout(() => {
+        if (gorilla) {
+            gorilla.setPosition(width * 0.875, height - 110);
+            gorilla.setVisible(true).setAlpha(0).setDepth(9985);
+            if (gorilla.body) gorilla.body.enable = false;
+            scene.tweens.add({ targets: gorilla, alpha: 1, duration: 400 });
+        }
+    }, 1300);
 
     // 2. 獨立 Boss 主題色爆炸輔助函式 (新增中文註解：定義個別 Boss 專屬主題色爆炸粒子與相機閃光函數)
     const triggerIndividualExplosion = (bossSprite, tintColor, flashColor) => {
@@ -2559,7 +2647,7 @@ function triggerBossAlignAndExplodeScript(scene) {
         }, 1500);
     };
 
-    // 3. 一秒後 (在 500ms + 700ms 後再等待 1.2秒，即 1900ms) 讓四位 Boss 從左到右一一自爆！ (新增中文註解：Boss 全員對齊後一秒，四位從左到右依序大自爆！)
+    // 3. 一秒後 (在 500ms + 700ms 後再等待 1.2秒，即 1900ms) 讓七位 Boss 從左到右一一自爆！ (新增中文註解：Boss 全員對齊後一秒，七位從左到右依序大自爆！)
     const startExplodeTime = 1900;
     
     setTimeout(() => {
@@ -2598,10 +2686,16 @@ function triggerBossAlignAndExplodeScript(scene) {
         scene.cameras.main.shake(350, 0.03);
     }, startExplodeTime + 1500);
 
-    // 4. 爆炸完後 1.3 秒，顯現最終感性/鬼畜的字幕與 Alfa-X 作者署名 (新增中文註解：定時觸發最終感性結局字幕，延後至 2800ms)
+    setTimeout(() => {
+        triggerIndividualExplosion(gorilla, 0xff4500, 0xff4500); // 大猩猩：烈焰橘紅色自爆 (新增中文註解：大猩猩橘紅色粒子自爆)
+        scene.cameras.main.flash(350, 255, 69, 0); // 橘紅色終結閃光
+        scene.cameras.main.shake(350, 0.03);
+    }, startExplodeTime + 1800);
+
+    // 4. 爆炸完後，顯現最終感性/鬼畜的字幕與 Alfa-X 作者署名 (新增中文註解：定時觸發最終感性結局字幕，延後至 3100ms)
     setTimeout(() => {
         showFinalEndingCredits(scene);
-    }, startExplodeTime + 2800);
+    }, startExplodeTime + 3100);
 }
 
 /**

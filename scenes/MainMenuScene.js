@@ -18,6 +18,8 @@ export class MainMenuScene extends Phaser.Scene {
         this.load.image('poopKingSelect', './assets/images/請屎皇.jpg');
         // 預載我沒有GG 的選擇圖片 (新增中文註解：載入新 Boss 我沒有GG 的圖片)
         this.load.image('noGGSelect', './assets/images/我沒有GG.jpg');
+        // 預載大猩猩的選擇圖片 (新增中文註解：載入新 Boss 大猩猩的圖片)
+        this.load.image('gorillaSelect', './assets/images/無敵大猩猩.jpg');
     }
 
     create() {
@@ -184,20 +186,20 @@ export class BossSelectScene extends Phaser.Scene {
     create() {
         const width = this.cameras.main.width;
         const height = this.cameras.main.height;
-        const sceneHeight = 920; // 新增中文註解：定義包含滾動範圍的場景總高度，使背景與金色粒子完全覆蓋滾動後的區域
+        const sceneHeight = 1300; // 新增中文註解：定義包含三排 Boss 滾動範圍的場景總高度，使背景與金色粒子完全覆蓋滾動後的區域
 
         // 設定漸層背景以保持視覺風格一致
         const bgGfx = this.add.graphics();
         bgGfx.fillGradientStyle(0x1a1a1a, 0x1a1a1a, 0x050505, 0x050505, 1);
-        bgGfx.fillRect(0, 0, width, sceneHeight); // 新增中文註解：改為填滿 sceneHeight 920 像素
+        bgGfx.fillRect(0, 0, width, sceneHeight); // 新增中文註解：改為填滿 sceneHeight 1300 像素
 
         // === 同步建立金光點背景特效 ===
         const particles = this.add.graphics();
         const stars = [];
-        for (let i = 0; i < 45; i++) {
+        for (let i = 0; i < 60; i++) {
             stars.push({
                 x: Phaser.Math.Between(0, width),
-                y: Phaser.Math.Between(0, sceneHeight), // 新增中文註解：粒子生成高度改為 sceneHeight 920 像素
+                y: Phaser.Math.Between(0, sceneHeight), // 新增中文註解：粒子生成高度改為 sceneHeight 1300 像素
                 size: Phaser.Math.Between(1, 3),
                 alpha: Phaser.Math.FloatBetween(0.15, 0.7),
                 speed: Phaser.Math.FloatBetween(0.2, 0.8)
@@ -242,9 +244,10 @@ export class BossSelectScene extends Phaser.Scene {
         const colSpacing = 300; // 卡片中心水平間距
         const firstRowY = 290;  // 第一排 Y 座標 (頂部 Y=130，與 Y=80 的標題保持安全距離)
         const secondRowY = 670; // 第二排 Y 座標 (卡片到底 Y=830)
+        const thirdRowY = 1050; // 第三排 Y 座標 (新增中文註解：第三排大猩猩位置)
 
-        // 啟用滑動機制：場景邊界設為 0, 0, width, 920，最大 scrollY 設為 200 (新增中文註解：啟用相機滑動)
-        this.cameras.main.setBounds(0, 0, width, 920);
+        // 啟用滑動機制：場景邊界設為 0, 0, width, 1300，最大 scrollY 設為 580 (新增中文註解：啟用相機滑動)
+        this.cameras.main.setBounds(0, 0, width, 1300);
 
         // 建立滑動提示文字 (新增中文註解：在下方建立一個指示有更多內容的提示文字)
         const scrollHint = this.add.text(width / 2, height - 30, '▼ 向下滾動以查看更多 Boss', {
@@ -266,8 +269,8 @@ export class BossSelectScene extends Phaser.Scene {
 
         // 滾輪滾動事件 (新增中文註解：設定滑鼠滾輪滾動相機)
         this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY, deltaZ) => {
-            this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY + deltaY * 0.5, 0, 200);
-            if (this.cameras.main.scrollY > 30) {
+            this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY + deltaY * 0.5, 0, 580);
+            if (this.cameras.main.scrollY > 400) {
                 scrollHint.setVisible(false);
             } else {
                 scrollHint.setVisible(true);
@@ -289,9 +292,9 @@ export class BossSelectScene extends Phaser.Scene {
         this.input.on('pointermove', (pointer) => {
             if (isDragging) {
                 const diffY = dragStartY - pointer.y;
-                this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY + diffY, 0, 200);
+                this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY + diffY, 0, 580);
                 dragStartY = pointer.y;
-                if (this.cameras.main.scrollY > 30) {
+                if (this.cameras.main.scrollY > 400) {
                     scrollHint.setVisible(false);
                 } else {
                     scrollHint.setVisible(true);
@@ -331,6 +334,11 @@ export class BossSelectScene extends Phaser.Scene {
         // 建立「我沒有GG」Boss 選卡 (新增中文註解：建立我沒有GG選卡，排在第二排第三個)
         this.createBossCard(width / 2 + colSpacing, secondRowY, 'noGGSelect', '我沒有GG', () => {
             this.scene.start('GameScene', { selectedBoss: 'noGG' });
+        });
+
+        // 第三排：「大猩猩」Boss 選卡 (新增中文註解：建立大猩猩選卡，排在第三排左側)
+        this.createBossCard(width / 2 - colSpacing, thirdRowY, 'gorillaSelect', '大猩猩', () => {
+            this.scene.start('GameScene', { selectedBoss: 'gorilla' });
         });
 
         // 返回主選單按鈕 (改至左上角 X=130, Y=50，並固定在畫面上不受滾動影響)
